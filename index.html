@@ -103,7 +103,12 @@ ol.steps li{margin:3px 0}
 "use strict";
 /* ================= DATA ================= */
 const KEY = "edrones-checklist-v1";
-const REPO_URL = "https://github.com/SKRIPSI-FIXEDWING/flightcontroller-Edrones";
+const FC_REPO = "SKRIPSI-FIXEDWING/flightcontroller-Edrones";
+const REPO_URL = "https://github.com/" + FC_REPO;
+const DOSEN = ["Pembimbing 1", "Pembimbing 2", "Penguji", "Lainnya"];
+// Grup tujuan saat poin masukan dijadikan tugas: [tab, id grup]
+const TARGETS = [["skripsi","bab123"],["skripsi","bab4"],["skripsi","bab5"],["skripsi","bimbingan"],
+  ["analisis","rekap"],["persiapan","misi"],["sidang","daftar"],["sidang","slide"],["sidang","latihan"],["sidang","pasca"]];
 const DEFAULT_DIR = "~/flightcontroller-Edrones";
 
 const TABS = [
@@ -113,6 +118,7 @@ const TABS = [
   {id:"terbang", t:"Terbang"},
   {id:"analisis", t:"Analisis"},
   {id:"skripsi", t:"Skripsi"},
+  {id:"bimbingan", t:"Bimbingan"},
   {id:"sidang", t:"Sidang"},
 ];
 
@@ -320,7 +326,7 @@ const LOG_FIELDS = [
 const STATUS = {belum:"Belum", selesai:"Selesai", ulang:"Perlu diulang", batal:"Batal"};
 
 /* ================= STATE ================= */
-function fresh(){ return {checks:{}, flights:{}, days:[], custom:{}, sidang:"", tab:"ringkasan", open:{}, projectDir:DEFAULT_DIR, ts:{}}; }
+function fresh(){ return {checks:{}, flights:{}, days:[], custom:{}, bimbingan:[], sidang:"", tab:"ringkasan", open:{}, projectDir:DEFAULT_DIR, ts:{}}; }
 let S;
 try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = fresh(); }
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); updateHeader(); Sync.schedule(); }
@@ -335,6 +341,7 @@ function getV(st, k){
     case "fl": return st.flights[a]?.log?.[b];
     case "d":  return st.days.find(x=>x.id===a);
     case "cu": return st.custom[a];
+    case "b":  return (st.bimbingan||[]).find(x=>x.id===a);
     default:   return st[t];   // sidang, projectDir
   }
 }
@@ -349,6 +356,9 @@ function setV(st, k, v){
       if (i<0) st.days.push(c); else st.days[i] = c;
       st.days.sort((x,y)=>x.date.localeCompare(y.date)); break; }
     case "cu": st.custom[a] = v ? v.map(x=>({...x})) : []; break;
+    case "b": { const arr = (st.bimbingan ||= []); const i = arr.findIndex(x=>x.id===a); const c = v && JSON.parse(JSON.stringify(v));
+      if (i<0) arr.push(c); else arr[i] = c;
+      arr.sort((x,y)=>(x.tanggal||"").localeCompare(y.tanggal||"")); break; }
     default:   st[t] = v;
   }
 }
@@ -361,6 +371,7 @@ function allKeys(st){
   Object.entries(st.flights).forEach(([c,f])=>{ ks.push(K("fs",c)); Object.keys(f.log||{}).forEach(x=>ks.push(K("fl",c,x))); });
   st.days.forEach(d=>ks.push(K("d",d.id)));
   Object.keys(st.custom).forEach(g=>ks.push(K("cu",g)));
+  (st.bimbingan||[]).forEach(b=>ks.push(K("b",b.id)));
   if (st.sidang) ks.push("sidang");
   ks.push("projectDir");
   return ks;
@@ -374,12 +385,20 @@ function mergeInto(local, remote){
   });
   return changed;
 }
-const SYNC_FIELDS = ["checks","flights","days","custom","sidang","projectDir","ts"];
+const SYNC_FIELDS = ["checks","flights","days","custom","bimbingan","sidang","projectDir","ts"];
 const syncable = st => Object.fromEntries(SYNC_FIELDS.map(f=>[f, st[f]]));
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const logOf = code => (S.flights[code] ||= {status:"belum", log:{}}).log;
+const liveBim = () => (S.bimbingan||[]).filter(b=>!b.deleted);
+const bimOf = id => (S.bimbingan||[]).find(b=>b.id===id);
+const groupOf = (tab, gid) => GROUPS[tab].find(g=>g.id===gid);
+const tabTitle = id => TABS.find(t=>t.id===id).t;
+const fmtTgl = d => d ? new Date(d+"T00:00:00").toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"}) : "";
+// Poin yang sudah jadi tugas memakai centang tugas itu, jadi status selalu sama di kedua tempat.
+function linkedTask(p){ return p.target && (S.custom[p.target.gid]||[]).find(c=>c.id===p.target.cid); }
+function poinCheckId(b, p){ const c = linkedTask(p); return c ? `${p.target.gid}:c:${c.id}` : `bim:${b.id}:${p.id}`; }
 const liveDays = () => S.days.filter(d=>!d.deleted);
 const flOf = code => (S.flights[code] ||= {status:"belum", log:{}});
 
@@ -403,6 +422,8 @@ function progress(){
   const r = progGroups("analisis"); p.analisis = [ad+r[0], at+r[1]];
   p.skripsi = progGroups("skripsi");
   p.sidang = progGroups("sidang");
+  let bd=0, bt=0; liveBim().forEach(b=>b.poin.forEach(x=>{ bt++; if (S.checks[poinCheckId(b,x)]) bd++; }));
+  p.bimbingan = [bd, bt];
   return p;
 }
 
@@ -443,7 +464,9 @@ function groupHtml(g, prefix=""){
   if (g.params) h += `<table><tr><th>Parameter</th><th>Nilai</th><th>Catatan</th></tr>` +
     PARAMS.map(r=>`<tr><td><code>${r[0]}</code></td><td><b>${r[1]}</b></td><td class="muted">${r[2]}</td></tr>`).join("") + `</table>`;
   g.items.forEach((txt,i)=> h += itemHtml(`${prefix}${g.id}:${i}`, txt));
-  (S.custom[prefix+g.id]||[]).forEach(c => h += itemHtml(`${prefix}${g.id}:c:${c.id}`, esc(c.text), `${prefix+g.id}|${c.id}`));
+  (S.custom[prefix+g.id]||[]).forEach(c => h += itemHtml(`${prefix}${g.id}:c:${c.id}`, esc(c.text) +
+    (c.src ? ` <a href="#" class="tag" data-gobim="${esc(c.src)}">bimbingan ${esc(fmtTgl(bimOf(c.src)?.tanggal))}</a>` : ""),
+    `${prefix+g.id}|${c.id}`));
   if (g.editable) h += `<div class="add"><input type="text" placeholder="Tambah item…" data-addinput="${esc(prefix+g.id)}">
     <button class="btn small" data-add="${esc(prefix+g.id)}">Tambah</button></div>`;
   return h + `</div>`;
@@ -467,7 +490,7 @@ const VIEWS = {
       ${dd===null ? `<div class="muted">Isi tanggal sidang (perkiraan juga boleh) untuk hitung mundur.</div>` : ""}</div>`;
     h += `<div class="card"><h2>Progres</h2>` +
       progHtml("Persiapan", p.persiapan) + progHtml("Terbang (data)", p.terbang) +
-      progHtml("Analisis", p.analisis) + progHtml("Skripsi", p.skripsi) + progHtml("Sidang", p.sidang) + `</div>`;
+      progHtml("Analisis", p.analisis) + progHtml("Skripsi", p.skripsi) + progHtml("Masukan bimbingan", p.bimbingan) + progHtml("Sidang", p.sidang) + `</div>`;
     h += `<div class="card"><h2>Terbang per grup</h2><div class="kpis">
       <div><b>${grp("F")}</b><span>Fuzzy</span></div><div><b>${grp("L")}</b><span>L1 tetap</span></div>
       <div><b>${grp("P")}</b><span>PID</span></div><div><b>${grp("FK")}</b><span>Fuzzy R80</span></div>
@@ -481,6 +504,17 @@ const VIEWS = {
         <a class="btn ghost small" href="${REPO_URL}/blob/master/docs/checklist-terbang-november-2026.md" target="_blank" rel="noopener">Checklist di repo</a></div>
       <label class="muted">Folder project di laptop (dipakai di perintah analisis)</label>
       <input type="text" data-projectdir value="${esc(S.projectDir || DEFAULT_DIR)}"></div>`;
+    {
+      const open = []; liveBim().forEach(b=>b.poin.forEach(x=>{ if (!S.checks[poinCheckId(b,x)]) open.push([b,x]); }));
+      const nexts = liveBim().map(b=>b.next).filter(x=>x && daysTo(x)>=0).sort();
+      h += `<div class="card"><div class="row"><h2>Bimbingan</h2><span class="spacer"></span>
+        <button class="btn ghost small" data-tab="bimbingan">Buka</button></div>
+        ${nexts.length ? `<div class="note info">Bimbingan berikutnya: <b>${esc(fmtTgl(nexts[0]))}</b> (${daysTo(nexts[0])===0 ? "hari ini" : "H-"+daysTo(nexts[0])})</div>` : ""}
+        ${open.length ? `<div class="muted">${open.length} masukan belum selesai:</div>` +
+          open.slice(0,5).map(([b,x])=>itemHtml(poinCheckId(b,x), esc(x.text) + ` <span class="muted">(${esc(fmtTgl(b.tanggal))})</span>`)).join("") +
+          (open.length>5 ? `<div class="muted">…dan ${open.length-5} lagi</div>` : "")
+          : `<div class="muted">Tidak ada masukan yang tertunda.</div>`}</div>`;
+    }
     h += Sync.on() ? `<div class="card"><h2>Sinkron server (GitHub Gist)</h2>
       <div class="note info" id="syncStatus">${esc(Sync.status())}</div>
       <div class="muted">Data otomatis dikirim ke gist privat setiap ada perubahan dan diambil saat aplikasi dibuka.
@@ -495,8 +529,8 @@ const VIEWS = {
     : `<div class="card"><h2>Sinkron server (GitHub Gist)</h2>
       <div class="muted">Supaya data tidak hilang dan sama di HP & laptop. Aplikasi tetap jalan offline.</div>
       <ol class="steps muted">
-        <li>Buka <a href="https://github.com/settings/tokens/new?scopes=gist&description=Checklist%20Skripsi%20Edrones" target="_blank" rel="noopener">pembuatan token GitHub</a>
-          (sudah terpilih hanya izin <b>gist</b>). Atur kedaluwarsa sampai setelah sidang, lalu Generate.</li>
+        <li>Buka <a href="https://github.com/settings/tokens/new?scopes=gist,public_repo&description=Checklist%20Skripsi%20Edrones" target="_blank" rel="noopener">pembuatan token GitHub</a>
+          (sudah terpilih izin <b>gist</b> dan <b>public_repo</b>; public_repo dipakai untuk membuat issue di repo flight controller). Atur kedaluwarsa sampai setelah sidang, lalu Generate.</li>
         <li>Tempel token di bawah. Perangkat pertama: kosongkan Gist ID (gist dibuat otomatis).</li>
         <li>Perangkat kedua: tempel token yang sama dan Gist ID dari perangkat pertama.</li>
       </ol>
@@ -579,6 +613,59 @@ const VIEWS = {
     return h;
   },
   skripsi(){ return GROUPS.skripsi.map(g=>groupHtml(g)).join(""); },
+  bimbingan(){
+    const [d,t] = progress().bimbingan;
+    let h = `<div class="card"><h2>Catatan bimbingan</h2>
+      <div class="muted">Catat tiap bimbingan. Poin masukan bisa dijadikan tugas di tab lain (centangnya tersambung)
+        atau issue di repo flight controller.</div>
+      <div class="grid" style="margin-top:8px">
+        <div><label>Tanggal</label><input type="date" id="bimDate" value="${today()}"></div>
+        <div><label>Dengan</label><select id="bimDosen">${DOSEN.map(x=>`<option>${x}</option>`).join("")}</select></div>
+        <div class="full"><label>Topik</label><input type="text" id="bimTopik" placeholder="mis. draf Bab 4, hasil terbang F1–F3"></div></div>
+      <div class="row" style="margin-top:8px"><button class="btn" data-act="addbim">Tambah bimbingan</button>
+        <span class="spacer"></span><span class="muted">Masukan selesai ${d}/${t}</span></div></div>`;
+    const opts = `<option value="">Jadikan tugas di…</option>` + TARGETS.map(([tb,g])=>
+      `<option value="${tb}|${g}">${tabTitle(tb)} · ${groupOf(tb,g).title}</option>`).join("");
+    [...liveBim()].reverse().forEach(b => {
+      const done = b.poin.filter(x=>S.checks[poinCheckId(b,x)]).length;
+      h += `<details class="fl" id="bim-${b.id}" ${S.open["b"+b.id]?"open":""} data-openkey="b${b.id}"><summary>
+        <span class="code">${esc(fmtTgl(b.tanggal))}</span><span class="muted">${esc(b.dosen)}${b.topik ? " · "+esc(b.topik) : ""}</span>
+        <span class="spacer"></span><span class="tag ${b.poin.length && done===b.poin.length ? "st-selesai" : ""}">${done}/${b.poin.length}</span></summary><div class="body">
+        <div class="grid">
+          <div><label>Tanggal</label><input type="date" data-bimfield="${b.id}|tanggal" value="${esc(b.tanggal)}"></div>
+          <div><label>Dengan</label><select data-bimfield="${b.id}|dosen">${DOSEN.map(x=>`<option ${x===b.dosen?"selected":""}>${x}</option>`).join("")}</select></div>
+          <div class="full"><label>Topik</label><input type="text" data-bimfield="${b.id}|topik" value="${esc(b.topik)}"></div>
+          <div class="full"><label>Catatan (baris diawali "-" bisa diubah jadi poin)</label>
+            <textarea data-bimfield="${b.id}|catatan" rows="5">${esc(b.catatan)}</textarea></div>
+          <div class="full"><button class="btn ghost small" data-parsepoin="${b.id}">Ubah baris "-" jadi poin masukan</button></div>
+          <div><label>Bimbingan berikutnya</label><input type="date" data-bimfield="${b.id}|next" value="${esc(b.next)}"></div>
+        </div>
+        <h3>Poin masukan</h3>
+        ${b.poin.length ? "" : `<div class="muted">Belum ada poin.</div>`}
+        ${b.poin.map(x => {
+          const task = linkedTask(x);
+          const chips = [];
+          if (task) chips.push(`<a href="#" class="tag" data-gotab="${x.target.tab}">→ ${esc(tabTitle(x.target.tab))} · ${esc(groupOf(x.target.tab,x.target.gid).title)}</a>`);
+          if (x.issue?.url) chips.push(`<a class="tag" href="${esc(x.issue.url)}" target="_blank" rel="noopener">issue FC #${esc(x.issue.number)}</a>`);
+          const acts = [];
+          if (!task) acts.push(`<select data-totask="${b.id}|${x.id}" style="flex:1;min-width:150px">${opts}</select>`);
+          if (!x.issue?.url){
+            acts.push(`<button class="btn ghost small" data-issue="${b.id}|${x.id}">Jadikan issue FC</button>`);
+            if (x.issueForm) acts.push(`<a class="btn ghost small" href="${esc(issueFormUrl(b,x))}" target="_blank" rel="noopener">Buka form issue</a>`,
+              `<button class="btn ghost small" data-issueurl="${b.id}|${x.id}">Tempel link issue</button>`);
+          }
+          return itemHtml(poinCheckId(b,x), esc(x.text) + (chips.length ? `<div class="row" style="gap:4px;margin-top:4px">${chips.join("")}</div>` : ""), null)
+            .replace(/<\/div>\s*$/, `<button class="del" data-delpoin="${b.id}|${x.id}" title="Hapus poin">×</button></div>`) +
+            (acts.length ? `<div class="row" style="gap:6px;margin:0 0 6px 32px">${acts.join("")}</div>` : "");
+        }).join("")}
+        <div class="add"><input type="text" placeholder="Tambah poin masukan…" data-poininput="${b.id}">
+          <button class="btn small" data-addpoin="${b.id}">Tambah</button></div>
+        <div style="margin-top:12px"><button class="btn danger small" data-delbim="${b.id}">Hapus catatan bimbingan ini</button></div>
+        </div></details>`;
+    });
+    return h;
+  },
+
   sidang(){ return GROUPS.sidang.map(g=>groupHtml(g)).join(""); },
 };
 
@@ -591,7 +678,7 @@ function render(){
 
 /* ================= EVENTS ================= */
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-tab],[data-add],[data-delcustom],[data-act],[data-delday],[data-goflight],[data-copy]");
+  const b = e.target.closest("[data-tab],[data-add],[data-delcustom],[data-act],[data-delday],[data-goflight],[data-copy],[data-gotab],[data-gobim],[data-addpoin],[data-delpoin],[data-parsepoin],[data-delbim],[data-issue],[data-issueurl]");
   if (!b) return;
   const d = b.dataset;
   if (d.tab){ S.tab = d.tab; save(); render(); window.scrollTo(0,0); }
@@ -610,12 +697,43 @@ document.addEventListener("click", e => {
   else if (d.goflight){ S.tab="terbang"; S.open[d.goflight]=true; save(); render();
     document.getElementById("fl-"+d.goflight)?.scrollIntoView({behavior:"smooth"}); }
   else if (d.copy){ const old = b.textContent; navigator.clipboard?.writeText(d.copy).then(()=>{ b.textContent="Tersalin ✓"; setTimeout(()=>b.textContent=old,1500); }); }
+  else if (d.gotab){ e.preventDefault(); S.tab = d.gotab; save(); render(); window.scrollTo(0,0); }
+  else if (d.gobim){ e.preventDefault(); S.tab = "bimbingan"; S.open["b"+d.gobim] = true; save(); render();
+    document.getElementById("bim-"+d.gobim)?.scrollIntoView({behavior:"smooth"}); }
+  else if (d.addpoin){ addPoin(d.addpoin); }
+  else if (d.delpoin){ const [bid,pid] = d.delpoin.split("|"); const bm = bimOf(bid);
+    if (!confirm("Hapus poin ini? (Tugas/issue yang sudah dibuat tidak ikut terhapus.)")) return;
+    bm.poin = bm.poin.filter(x=>x.id!==pid); touch("b", bid); save(); render(); }
+  else if (d.parsepoin){ const bm = bimOf(d.parsepoin); let n = 0;
+    (bm.catatan||"").split("\n").forEach(line => { const m = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.+)$/);
+      if (m && !bm.poin.some(x=>x.text===m[1].trim())){ bm.poin.push({id:uid(), text:m[1].trim()}); n++; } });
+    if (!n){ alert('Tidak ada baris baru yang diawali "-", "*", "•" atau nomor.'); return; }
+    touch("b", bm.id); save(); render(); }
+  else if (d.delbim){ if (!confirm("Hapus catatan bimbingan ini? Tugas yang sudah dibuat tetap ada.")) return;
+    const bm = bimOf(d.delbim); bm.deleted = true; touch("b", bm.id); save(); render(); }
+  else if (d.issue){ const [bid,pid] = d.issue.split("|"); createIssue(bimOf(bid), pid, b); }
+  else if (d.issueurl){ const [bid,pid] = d.issueurl.split("|"); const bm = bimOf(bid), x = bm.poin.find(y=>y.id===pid);
+    const url = (prompt("Tempel link issue GitHub (…/issues/123):") || "").trim();
+    const m = url.match(/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)/);
+    if (!m){ if (url) alert("Link issue tidak dikenali."); return; }
+    x.issue = {number:+m[2], url:`https://github.com/${m[1]}/issues/${m[2]}`}; delete x.issueForm; touch("b", bid); save(); render(); }
   else if (d.act) ACTIONS[d.act]();
 });
 document.addEventListener("change", e => {
   const t = e.target, d = t.dataset;
   if (d.check){ S.checks[d.check] = t.checked; touch("c", d.check);
     t.closest(".item")?.classList.toggle("done", t.checked); save(); }
+  else if (d.totask && t.value){
+    const [bid,pid] = d.totask.split("|"), [tab,gid] = t.value.split("|");
+    const bm = bimOf(bid), x = bm.poin.find(y=>y.id===pid);
+    const c = {id:uid(), text:x.text, src:bid};
+    (S.custom[gid] ||= []).push(c); touch("cu", gid);
+    const own = `bim:${bid}:${pid}`;
+    if (S.checks[own]){ S.checks[`${gid}:c:${c.id}`] = true; touch("c", `${gid}:c:${c.id}`); }
+    x.target = {tab, gid, cid:c.id}; touch("b", bid); save(); render();
+  }
+  else if (d.bimfield && e.target.tagName !== "TEXTAREA" && e.target.type !== "text"){
+    const [id,k] = d.bimfield.split("|"); bimOf(id)[k] = t.value; touch("b", id); save(); render(); }
   else if (d.status){ flOf(d.status).status = t.value; touch("fs", d.status); save(); render(); }
   else if (d.sidang !== undefined){ S.sidang = t.value; touch("sidang"); save(); render(); }
 });
@@ -623,6 +741,8 @@ document.addEventListener("input", e => {
   const t = e.target, d = t.dataset;
   if (d.logfield){ const [c,k] = d.logfield.split("|"); logOf(c)[k] = t.value; touch("fl", c, k); save(); }
   else if (d.projectdir !== undefined){ S.projectDir = t.value.trim() || DEFAULT_DIR; touch("projectDir"); save(); }
+  else if (d.bimfield && (t.tagName === "TEXTAREA" || t.type === "text")){
+    const [id,k] = d.bimfield.split("|"); bimOf(id)[k] = t.value; touch("b", id); save(); }
   else if (d.dayfield){ const [id,k] = d.dayfield.split("|"); const day = S.days.find(x=>x.id===id); if (day){ day[k]=t.value; touch("d", id); save(); } }
 });
 // Re-render setelah field angin / tanggal selesai diisi (untuk peringatan)
@@ -631,7 +751,52 @@ document.addEventListener("focusout", e => {
   if (pendingRender){ pendingRender = false; setTimeout(safeRender, 0); return; }
   if ((d.logfield && /\|(angin|tanggal)$/.test(d.logfield)) || (d.dayfield && /\|angin$/.test(d.dayfield))) render();
 });
-document.addEventListener("keydown", e => { if (e.key==="Enter" && e.target.dataset.addinput) addCustom(e.target.dataset.addinput); });
+document.addEventListener("keydown", e => {
+  if (e.key!=="Enter") return;
+  if (e.target.dataset.addinput) addCustom(e.target.dataset.addinput);
+  else if (e.target.dataset.poininput) addPoin(e.target.dataset.poininput);
+});
+function addPoin(bid){
+  const inp = document.querySelector(`[data-poininput="${CSS.escape(bid)}"]`);
+  const text = inp.value.trim(); if (!text) return;
+  bimOf(bid).poin.push({id:uid(), text}); touch("b", bid); save(); render();
+  document.querySelector(`[data-poininput="${CSS.escape(bid)}"]`)?.focus();
+}
+function issueText(b, x){
+  return {title: x.text.length > 90 ? x.text.slice(0,87) + "…" : x.text,
+    body: `Masukan bimbingan ${fmtTgl(b.tanggal)} (${b.dosen})${b.topik ? " — " + b.topik : ""}:\n\n> ${x.text}\n\n` +
+      (b.catatan ? `<details><summary>Catatan bimbingan</summary>\n\n${b.catatan}\n</details>\n\n` : "") +
+      `_Dibuat dari aplikasi Checklist Skripsi Edrones._`};
+}
+function issueFormUrl(b, x){
+  const t = issueText(b, x);
+  return `${REPO_URL}/issues/new?title=${encodeURIComponent(t.title)}&body=${encodeURIComponent(t.body)}`;
+}
+async function createIssue(b, pid, btn){
+  const x = b.poin.find(y=>y.id===pid);
+  if (Sync.on()){
+    btn.disabled = true; btn.textContent = "Membuat issue…";
+    try {
+      const r = await Sync.api(`/repos/${FC_REPO}/issues`, {method:"POST", body: JSON.stringify(issueText(b, x))});
+      x.issue = {number:r.number, url:r.html_url}; delete x.issueForm; touch("b", b.id); save(); render(); return;
+    } catch(err){
+      alert("Issue tidak bisa dibuat otomatis (" + err.message + ").\nToken perlu izin public_repo. " +
+        "Sementara pakai tombol \"Buka form issue\" lalu \"Tempel link issue\".");
+    }
+  }
+  x.issueForm = true; save(); render();
+}
+// Issue yang sudah ditutup di GitHub → poin masukan otomatis dicentang.
+async function refreshIssues(){
+  let changed = false;
+  for (const b of liveBim()) for (const x of b.poin){
+    const id = poinCheckId(b, x);
+    if (!x.issue?.number || S.checks[id]) continue;
+    try { const r = await Sync.api(`/repos/${FC_REPO}/issues/${x.issue.number}`);
+      if (r.state === "closed"){ S.checks[id] = true; touch("c", id); changed = true; } } catch(e){}
+  }
+  if (changed){ save(); safeRender(); }
+}
 document.addEventListener("toggle", e => {
   const k = e.target.dataset?.openkey; if (!k) return;
   if (e.target.open) S.open[k]=true; else delete S.open[k];
@@ -677,6 +842,14 @@ const ACTIONS = {
       (Sync.on() ? "\n\nData di server tidak dihapus dan akan terambil lagi saat sinkron berikutnya." : ""))) return;
     if (!confirm("Yakin? Tidak bisa dibatalkan.")) return;
     S = fresh(); save(); render();
+  },
+  addbim(){
+    const bm = {id:uid(), tanggal:document.getElementById("bimDate").value || today(),
+      dosen:document.getElementById("bimDosen").value, topik:document.getElementById("bimTopik").value.trim(),
+      catatan:"", next:"", poin:[]};
+    (S.bimbingan ||= []).push(bm); S.bimbingan.sort((x,y)=>x.tanggal.localeCompare(y.tanggal));
+    S.open["b"+bm.id] = true; touch("b", bm.id); save(); render();
+    document.getElementById("bim-"+bm.id)?.scrollIntoView({behavior:"smooth"});
   },
   async syncon(){
     const token = document.getElementById("syncToken").value.trim();
@@ -750,6 +923,7 @@ const Sync = (() => {
         if (needPush) await api("/gists/" + cfg.gistId, {method:"PATCH", body: JSON.stringify({files: files()})});
       }
       cfg.last = Date.now(); saveCfg();
+      refreshIssues();
       setStatus("Tersinkron " + new Date(cfg.last).toLocaleString("id-ID", {dateStyle:"medium", timeStyle:"short"}));
     } catch(e){
       setStatus("Gagal sinkron: " + e.message);
@@ -759,7 +933,7 @@ const Sync = (() => {
     }
   }
   return {
-    on: () => !!cfg.token, gistId: () => cfg.gistId || "", status: () => status, badge,
+    api, on: () => !!cfg.token, gistId: () => cfg.gistId || "", status: () => status, badge,
     schedule(){ if (!cfg.token) return; clearTimeout(timer); timer = setTimeout(run, 2500);
       if (!busy) setStatus("Ada perubahan, menunggu sinkron…"); },
     now: run,
