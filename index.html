@@ -113,6 +113,8 @@ ol.steps li{margin:3px 0}
 <script>
 "use strict";
 /* ================= DATA ================= */
+// Naikkan bersama VERSION di sw.js setiap ada perubahan.
+const APP_VERSION = "v5";
 const KEY = "edrones-checklist-v1";
 const FC_REPO = "SKRIPSI-FIXEDWING/flightcontroller-Edrones";
 const REPO_URL = "https://github.com/" + FC_REPO;
@@ -557,6 +559,9 @@ const VIEWS = {
         <button class="btn ghost" data-act="import">Impor JSON</button>
         <button class="btn danger" data-act="reset">Hapus semua</button>
       </div></div>`;
+    h += `<div class="row muted" style="justify-content:space-between;padding:0 4px">
+      <span>Versi aplikasi: <b>${APP_VERSION}</b></span>
+      <button class="btn ghost small" data-act="update">Periksa pembaruan</button></div>`;
     return h;
   },
   persiapan(){ return GROUPS.persiapan.map(g=>groupHtml(g)).join(""); },
@@ -862,6 +867,11 @@ const ACTIONS = {
     S.open["b"+bm.id] = true; touch("b", bm.id); save(); render();
     document.getElementById("bim-"+bm.id)?.scrollIntoView({behavior:"smooth"});
   },
+  async update(){
+    const reg = await navigator.serviceWorker?.getRegistration();
+    if (reg) await reg.update().catch(()=>{});
+    location.reload();
+  },
   async syncon(){
     const token = document.getElementById("syncToken").value.trim();
     const gist = document.getElementById("syncGist").value.trim().replace(/^.*\//, "");
@@ -967,7 +977,18 @@ render();
 Sync.now();
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  navigator.serviceWorker.register("sw.js").catch(()=>{});
+  // updateViaCache "none": sw.js selalu dicek ke server, tidak lewat cache HTTP.
+  navigator.serviceWorker.register("sw.js", {updateViaCache:"none"}).then(reg => {
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(()=>{}); });
+  }).catch(()=>{});
+  // Begitu versi baru aktif, muat ulang sekali supaya langsung terpakai.
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloaded) return; reloaded = true;
+    const a = document.activeElement;
+    if (a && a.matches("input,textarea,select")) return;   // jangan ganggu yang sedang mengetik
+    location.reload();
+  });
 }
 </script>
 </body>

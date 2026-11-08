@@ -47,7 +47,7 @@ Di HP (offline di lapangan): halaman perlu disajikan lewat **https** sekali supa
 service worker menyimpan cache, misalnya lewat GitHub Pages / Netlify Drop. Setelah
 dibuka sekali, pilih "Tambahkan ke layar utama"; berikutnya bisa dibuka tanpa internet.
 
-Setelah mengubah `index.html`, naikkan `VERSION` di `sw.js`.
+Setelah mengubah `index.html`, naikkan `VERSION` di `sw.js` dan `APP_VERSION` di `index.html` (tampil di bawah tab Ringkasan).
 
 ## Tab Bimbingan
 
