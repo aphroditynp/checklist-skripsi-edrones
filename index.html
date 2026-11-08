@@ -320,14 +320,67 @@ const LOG_FIELDS = [
 const STATUS = {belum:"Belum", selesai:"Selesai", ulang:"Perlu diulang", batal:"Batal"};
 
 /* ================= STATE ================= */
-function fresh(){ return {checks:{}, flights:{}, days:[], custom:{}, sidang:"", tab:"ringkasan", open:{}, projectDir:DEFAULT_DIR}; }
+function fresh(){ return {checks:{}, flights:{}, days:[], custom:{}, sidang:"", tab:"ringkasan", open:{}, projectDir:DEFAULT_DIR, ts:{}}; }
 let S;
 try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = fresh(); }
-function save(){ localStorage.setItem(KEY, JSON.stringify(S)); updateHeader(); }
+function save(){ localStorage.setItem(KEY, JSON.stringify(S)); updateHeader(); Sync.schedule(); }
+
+/* Setiap data yang disinkron punya kunci dan waktu ubah (S.ts[kunci]).
+   Saat sinkron, untuk tiap kunci dipakai nilai yang paling baru diubah. */
+function getV(st, k){
+  const [t, a, b] = k.split("\u0001");
+  switch (t){
+    case "c":  return st.checks[a];
+    case "fs": return st.flights[a]?.status;
+    case "fl": return st.flights[a]?.log?.[b];
+    case "d":  return st.days.find(x=>x.id===a);
+    case "cu": return st.custom[a];
+    default:   return st[t];   // sidang, projectDir
+  }
+}
+function setV(st, k, v){
+  const [t, a, b] = k.split("\u0001");
+  const fl = c => (st.flights[c] ||= {status:"belum", log:{}});
+  switch (t){
+    case "c":  st.checks[a] = v; break;
+    case "fs": fl(a).status = v; break;
+    case "fl": fl(a).log[b] = v; break;
+    case "d": { const i = st.days.findIndex(x=>x.id===a); const c = v && {...v};
+      if (i<0) st.days.push(c); else st.days[i] = c;
+      st.days.sort((x,y)=>x.date.localeCompare(y.date)); break; }
+    case "cu": st.custom[a] = v ? v.map(x=>({...x})) : []; break;
+    default:   st[t] = v;
+  }
+}
+const K = (...p) => p.join("\u0001");
+function touch(...p){ S.ts[K(...p)] = Date.now(); }
+// Semua kunci yang punya nilai (dipakai untuk data lama tanpa ts dan untuk impor)
+function allKeys(st){
+  const ks = [];
+  Object.keys(st.checks).forEach(id=>ks.push(K("c",id)));
+  Object.entries(st.flights).forEach(([c,f])=>{ ks.push(K("fs",c)); Object.keys(f.log||{}).forEach(x=>ks.push(K("fl",c,x))); });
+  st.days.forEach(d=>ks.push(K("d",d.id)));
+  Object.keys(st.custom).forEach(g=>ks.push(K("cu",g)));
+  if (st.sidang) ks.push("sidang");
+  ks.push("projectDir");
+  return ks;
+}
+function stampAll(st, time){ allKeys(st).forEach(k=>{ if (!st.ts[k]) st.ts[k] = time; }); }
+stampAll(S, 1);  // data dari versi sebelum ada sinkron: dianggap paling lama
+function mergeInto(local, remote){
+  let changed = false;
+  Object.entries(remote.ts || {}).forEach(([k,t])=>{
+    if (t > (local.ts[k] || 0)){ setV(local, k, getV(remote, k)); local.ts[k] = t; changed = true; }
+  });
+  return changed;
+}
+const SYNC_FIELDS = ["checks","flights","days","custom","sidang","projectDir","ts"];
+const syncable = st => Object.fromEntries(SYNC_FIELDS.map(f=>[f, st[f]]));
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const logOf = code => (S.flights[code] ||= {status:"belum", log:{}}).log;
+const liveDays = () => S.days.filter(d=>!d.deleted);
 const flOf = code => (S.flights[code] ||= {status:"belum", log:{}});
 
 /* ================= HITUNG PROGRES ================= */
@@ -361,10 +414,11 @@ function updateHeader(){
   let d=0,t=0; Object.values(p).forEach(([a,b])=>{d+=a;t+=b;});
   let s = `Total ${Math.round(100*d/Math.max(t,1))}% · terbang ${p.terbang[0]}/${p.terbang[1]}`;
   const dd = daysTo(S.sidang); if (dd!==null) s += ` · sidang ${dd>=0 ? "H-"+dd : "sudah lewat"}`;
+  if (typeof Sync !== "undefined" && Sync.on()) s += " · " + Sync.badge();
   document.getElementById("sub").textContent = s;
   document.getElementById("tabs").innerHTML = TABS.map(x => {
     const pr = p[x.id];
-    const n = pr ? `<span class="n">${pr[0]}/${pr[1]}</span>` : (x.id==="hari" ? `<span class="n">${S.days.length}</span>` : "");
+    const n = pr ? `<span class="n">${pr[0]}/${pr[1]}</span>` : (x.id==="hari" ? `<span class="n">${liveDays().length}</span>` : "");
     return `<button data-tab="${x.id}" class="${S.tab===x.id?"on":""}">${x.t}${n}</button>`;
   }).join("");
 }
@@ -427,8 +481,31 @@ const VIEWS = {
         <a class="btn ghost small" href="${REPO_URL}/blob/master/docs/checklist-terbang-november-2026.md" target="_blank" rel="noopener">Checklist di repo</a></div>
       <label class="muted">Folder project di laptop (dipakai di perintah analisis)</label>
       <input type="text" data-projectdir value="${esc(S.projectDir || DEFAULT_DIR)}"></div>`;
+    h += Sync.on() ? `<div class="card"><h2>Sinkron server (GitHub Gist)</h2>
+      <div class="note info" id="syncStatus">${esc(Sync.status())}</div>
+      <div class="muted">Data otomatis dikirim ke gist privat setiap ada perubahan dan diambil saat aplikasi dibuka.
+        Di perangkat lain, isi token dan Gist ID yang sama.</div>
+      <label class="muted" style="display:block;margin-top:8px">Gist ID</label>
+      <div class="row"><input type="text" readonly value="${esc(Sync.gistId() || "(dibuat saat sinkron pertama)")}" style="flex:1">
+        ${Sync.gistId() ? `<button class="btn ghost small" data-copy="${esc(Sync.gistId())}">Salin</button>` : ""}</div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" data-act="syncnow">Sinkron sekarang</button>
+        ${Sync.gistId() ? `<a class="btn ghost" href="https://gist.github.com/${esc(Sync.gistId())}" target="_blank" rel="noopener">Lihat gist & riwayat</a>` : ""}
+        <button class="btn danger" data-act="syncoff">Putuskan di perangkat ini</button></div></div>`
+    : `<div class="card"><h2>Sinkron server (GitHub Gist)</h2>
+      <div class="muted">Supaya data tidak hilang dan sama di HP & laptop. Aplikasi tetap jalan offline.</div>
+      <ol class="steps muted">
+        <li>Buka <a href="https://github.com/settings/tokens/new?scopes=gist&description=Checklist%20Skripsi%20Edrones" target="_blank" rel="noopener">pembuatan token GitHub</a>
+          (sudah terpilih hanya izin <b>gist</b>). Atur kedaluwarsa sampai setelah sidang, lalu Generate.</li>
+        <li>Tempel token di bawah. Perangkat pertama: kosongkan Gist ID (gist dibuat otomatis).</li>
+        <li>Perangkat kedua: tempel token yang sama dan Gist ID dari perangkat pertama.</li>
+      </ol>
+      <div class="grid"><div class="full"><label>Token GitHub</label><input type="password" id="syncToken" autocomplete="off" placeholder="ghp_…"></div>
+        <div class="full"><label>Gist ID (kosongkan di perangkat pertama)</label><input type="text" id="syncGist" autocomplete="off"></div></div>
+      <div class="row" style="margin-top:8px"><button class="btn" data-act="syncon">Hubungkan</button></div>
+      <div class="muted" style="margin-top:6px">Token hanya disimpan di perangkat ini, tidak ikut file ekspor.</div></div>`;
     h += `<div class="card"><h2>Cadangan data</h2>
-      <div class="muted">Data tersimpan di browser HP ini saja. Ekspor rutin supaya tidak hilang.</div>
+      <div class="muted">${Sync.on() ? "Selain sinkron, ekspor sesekali sebagai cadangan tambahan." : "Tanpa sinkron, data hanya ada di browser perangkat ini. Ekspor rutin supaya tidak hilang."}</div>
       <div class="row" style="margin-top:8px">
         <button class="btn" data-act="export">Ekspor cadangan (JSON)</button>
         <button class="btn ghost" data-act="csv">Ekspor catatan terbang (CSV)</button>
@@ -442,7 +519,7 @@ const VIEWS = {
     let h = `<div class="card"><h2>Hari terbang</h2><div class="muted">Tambah satu entri tiap ke lapangan. Uji U1 diulang tiap hari.</div>
       <div class="add"><input type="date" id="newDay" value="${new Date().toISOString().slice(0,10)}">
       <button class="btn small" data-act="addday">Tambah hari</button></div></div>`;
-    [...S.days].reverse().forEach(day => {
+    [...liveDays()].reverse().forEach(day => {
       const pre = `day:${day.id}:`;
       const flown = FLIGHTS.filter(f => logOf(f.code).tanggal === day.date).map(f=>f.code);
       h += `<details class="fl" ${S.open["d"+day.id]?"open":""} data-openkey="d${day.id}"><summary>
@@ -522,35 +599,36 @@ document.addEventListener("click", e => {
   else if (d.delcustom){
     const [g,id] = d.delcustom.split("|");
     if (!confirm("Hapus item ini?")) return;
-    S.custom[g] = (S.custom[g]||[]).filter(c=>c.id!==id); save(); render();
+    S.custom[g] = (S.custom[g]||[]).filter(c=>c.id!==id); touch("cu",g); save(); render();
   }
   else if (d.delday){
     if (!confirm("Hapus hari terbang ini beserta checklist-nya?")) return;
-    S.days = S.days.filter(x=>x.id!==d.delday);
-    Object.keys(S.checks).forEach(k=>{ if (k.startsWith(`day:${d.delday}:`)) delete S.checks[k]; });
+    const day = S.days.find(x=>x.id===d.delday);
+    if (day){ day.deleted = true; touch("d", day.id); }   // ditandai, bukan dihapus, supaya ikut tersinkron
     save(); render();
   }
   else if (d.goflight){ S.tab="terbang"; S.open[d.goflight]=true; save(); render();
     document.getElementById("fl-"+d.goflight)?.scrollIntoView({behavior:"smooth"}); }
-  else if (d.copy){ navigator.clipboard?.writeText(d.copy).then(()=>{ b.textContent="Tersalin ✓"; setTimeout(()=>b.textContent="Salin perintah",1500); }); }
+  else if (d.copy){ const old = b.textContent; navigator.clipboard?.writeText(d.copy).then(()=>{ b.textContent="Tersalin ✓"; setTimeout(()=>b.textContent=old,1500); }); }
   else if (d.act) ACTIONS[d.act]();
 });
 document.addEventListener("change", e => {
   const t = e.target, d = t.dataset;
-  if (d.check){ S.checks[d.check] = t.checked; if (!t.checked) delete S.checks[d.check];
+  if (d.check){ S.checks[d.check] = t.checked; touch("c", d.check);
     t.closest(".item")?.classList.toggle("done", t.checked); save(); }
-  else if (d.status){ flOf(d.status).status = t.value; save(); render(); }
-  else if (d.sidang !== undefined){ S.sidang = t.value; save(); render(); }
+  else if (d.status){ flOf(d.status).status = t.value; touch("fs", d.status); save(); render(); }
+  else if (d.sidang !== undefined){ S.sidang = t.value; touch("sidang"); save(); render(); }
 });
 document.addEventListener("input", e => {
   const t = e.target, d = t.dataset;
-  if (d.logfield){ const [c,k] = d.logfield.split("|"); logOf(c)[k] = t.value; save(); }
-  else if (d.projectdir !== undefined){ S.projectDir = t.value.trim() || DEFAULT_DIR; save(); }
-  else if (d.dayfield){ const [id,k] = d.dayfield.split("|"); const day = S.days.find(x=>x.id===id); if (day){ day[k]=t.value; save(); } }
+  if (d.logfield){ const [c,k] = d.logfield.split("|"); logOf(c)[k] = t.value; touch("fl", c, k); save(); }
+  else if (d.projectdir !== undefined){ S.projectDir = t.value.trim() || DEFAULT_DIR; touch("projectDir"); save(); }
+  else if (d.dayfield){ const [id,k] = d.dayfield.split("|"); const day = S.days.find(x=>x.id===id); if (day){ day[k]=t.value; touch("d", id); save(); } }
 });
 // Re-render setelah field angin / tanggal selesai diisi (untuk peringatan)
 document.addEventListener("focusout", e => {
   const d = e.target.dataset;
+  if (pendingRender){ pendingRender = false; setTimeout(safeRender, 0); return; }
   if ((d.logfield && /\|(angin|tanggal)$/.test(d.logfield)) || (d.dayfield && /\|angin$/.test(d.dayfield))) render();
 });
 document.addEventListener("keydown", e => { if (e.key==="Enter" && e.target.dataset.addinput) addCustom(e.target.dataset.addinput); });
@@ -563,7 +641,7 @@ document.addEventListener("toggle", e => {
 function addCustom(g){
   const inp = document.querySelector(`[data-addinput="${CSS.escape(g)}"]`);
   const text = inp.value.trim(); if (!text) return;
-  (S.custom[g] ||= []).push({id:uid(), text}); save(); render();
+  (S.custom[g] ||= []).push({id:uid(), text}); touch("cu", g); save(); render();
 }
 
 function download(name, text, type){
@@ -588,27 +666,120 @@ const ACTIONS = {
       r.onload = () => { try { const data = JSON.parse(r.result);
           if (typeof data!=="object" || !data.checks) throw new Error("bukan file cadangan");
           if (!confirm("Ganti semua data di HP ini dengan isi file?")) return;
-          S = Object.assign(fresh(), data); save(); render();
+          const keep = {tab:S.tab, open:S.open};
+          S = Object.assign(fresh(), data, keep); S.ts = {}; stampAll(S, Date.now()); save(); render();
         } catch(err){ alert("Gagal impor: " + err.message); } };
       r.readAsText(i.files[0]); };
     i.click();
   },
   reset(){
-    if (!confirm("Hapus SEMUA centang dan catatan? Ekspor cadangan dulu kalau ragu.")) return;
+    if (!confirm("Hapus SEMUA centang dan catatan di perangkat ini? Ekspor cadangan dulu kalau ragu." +
+      (Sync.on() ? "\n\nData di server tidak dihapus dan akan terambil lagi saat sinkron berikutnya." : ""))) return;
     if (!confirm("Yakin? Tidak bisa dibatalkan.")) return;
     S = fresh(); save(); render();
+  },
+  async syncon(){
+    const token = document.getElementById("syncToken").value.trim();
+    const gist = document.getElementById("syncGist").value.trim().replace(/^.*\//, "");
+    if (!token){ alert("Tempel token GitHub dulu."); return; }
+    await Sync.connect(token, gist); render();
+  },
+  async syncnow(){ await Sync.now(); render(); },
+  syncoff(){
+    if (!confirm("Putuskan sinkron di perangkat ini? Data di perangkat dan di gist tetap ada.")) return;
+    Sync.disconnect(); render();
   },
   addday(){
     const date = document.getElementById("newDay").value || today();
     const day = {id:uid(), date, angin:"", lokasi:"", catatan:""};
-    S.days.push(day);
+    S.days.push(day); touch("d", day.id);
     S.days.sort((a,b)=>a.date.localeCompare(b.date));
     S.open["d"+day.id] = true;
     save(); render();
   },
 };
 
+/* ================= SINKRON GITHUB GIST ================= */
+// Token dan ID gist disimpan terpisah dari data (tidak ikut file ekspor, tidak ikut ke gist).
+const SYNC_KEY = "edrones-sync-v1";
+const GIST_FILE = "checklist-skripsi.json";
+const Sync = (() => {
+  let cfg = {}; try { cfg = JSON.parse(localStorage.getItem(SYNC_KEY) || "{}"); } catch(e){}
+  let timer = null, busy = false, again = false;
+  let status = cfg.token ? "Belum sinkron" : "Belum diatur";
+  const saveCfg = () => localStorage.setItem(SYNC_KEY, JSON.stringify(cfg));
+  const badge = () => !cfg.token ? "" : status.startsWith("Tersinkron") ? "☁︎ ✓" :
+    /^(Gagal|Offline)/.test(status) ? "☁︎ !" : "☁︎ …";
+  function setStatus(t){
+    status = t;
+    const el = document.getElementById("syncStatus"); if (el) el.textContent = t;
+    updateHeader();
+  }
+  async function api(path, opt = {}){
+    const r = await fetch("https://api.github.com" + path, {...opt, headers:{
+      "Accept":"application/vnd.github+json", "Authorization":"Bearer " + cfg.token,
+      "X-GitHub-Api-Version":"2022-11-28", ...(opt.body ? {"Content-Type":"application/json"} : {})}});
+    if (!r.ok) throw new Error(r.status===401 ? "token salah atau kedaluwarsa" :
+      r.status===404 ? "gist tidak ditemukan (cek Gist ID dan izin token)" : "HTTP " + r.status);
+    return r.json();
+  }
+  async function readRemote(){
+    const g = await api("/gists/" + cfg.gistId);
+    const f = g.files[GIST_FILE];
+    if (!f) throw new Error(`file ${GIST_FILE} tidak ada di gist ini`);
+    const txt = f.truncated ? await (await fetch(f.raw_url)).text() : f.content;
+    return JSON.parse(txt).data;
+  }
+  const files = () => ({[GIST_FILE]: {content: JSON.stringify(
+    {app:"checklist-skripsi-edrones", disimpan:new Date().toISOString(), data:syncable(S)})}});
+  async function run(){
+    if (!cfg.token) return;
+    if (busy){ again = true; return; }
+    if (!navigator.onLine){ setStatus("Offline: tersimpan di perangkat, sinkron otomatis saat ada internet"); return; }
+    busy = true; setStatus("Menyinkron…");
+    try {
+      if (!cfg.gistId){
+        const g = await api("/gists", {method:"POST", body: JSON.stringify(
+          {description:"Data Checklist Skripsi Edrones (jangan dihapus)", public:false, files: files()})});
+        cfg.gistId = g.id; saveCfg();
+      } else {
+        const remote = await readRemote();
+        const rts = remote.ts || {};
+        const needPush = Object.entries(S.ts).some(([k,t]) => t > (rts[k] || 0));
+        if (mergeInto(S, remote)){ localStorage.setItem(KEY, JSON.stringify(S)); safeRender(); }
+        if (needPush) await api("/gists/" + cfg.gistId, {method:"PATCH", body: JSON.stringify({files: files()})});
+      }
+      cfg.last = Date.now(); saveCfg();
+      setStatus("Tersinkron " + new Date(cfg.last).toLocaleString("id-ID", {dateStyle:"medium", timeStyle:"short"}));
+    } catch(e){
+      setStatus("Gagal sinkron: " + e.message);
+    } finally {
+      busy = false;
+      if (again){ again = false; run(); }
+    }
+  }
+  return {
+    on: () => !!cfg.token, gistId: () => cfg.gistId || "", status: () => status, badge,
+    schedule(){ if (!cfg.token) return; clearTimeout(timer); timer = setTimeout(run, 2500);
+      if (!busy) setStatus("Ada perubahan, menunggu sinkron…"); },
+    now: run,
+    connect(token, gistId){ cfg = {token, gistId}; saveCfg(); return run(); },
+    disconnect(){ clearTimeout(timer); cfg = {}; saveCfg(); setStatus("Belum diatur"); },
+  };
+})();
+window.addEventListener("online", () => Sync.now());
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") Sync.now(); });
+
+// Jangan render ulang saat sedang mengetik (fokus bisa hilang); tunggu sampai field ditinggalkan.
+let pendingRender = false;
+function safeRender(){
+  const a = document.activeElement;
+  if (a && a.matches("input[type=text],input[type=number],input[type=password],textarea")){ pendingRender = true; return; }
+  render();
+}
+
 render();
+Sync.now();
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   navigator.serviceWorker.register("sw.js").catch(()=>{});

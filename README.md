@@ -14,8 +14,28 @@ Tab: Ringkasan (progres, hitung mundur sidang, link project, cadangan data), Per
 (firmware, parameter, misi), Hari terbang (checklist per hari + uji U1), Terbang
 (18 terbang: prosedur + form catatan + status), Analisis, Skripsi, Sidang.
 
-Data disimpan di `localStorage` browser, **hanya di perangkat itu**. Pakai
-"Ekspor cadangan (JSON)" secara rutin; "Impor JSON" untuk memindah ke HP/laptop lain.
+Data disimpan di `localStorage` browser dan bisa disinkron ke server (lihat bawah).
+"Ekspor cadangan (JSON)" tetap tersedia sebagai cadangan tambahan.
+
+## Sinkron server (GitHub Gist)
+
+Tab Ringkasan → kartu "Sinkron server". Data dikirim ke satu **gist privat**
+(`checklist-skripsi.json`) di akun GitHub, sehingga:
+- tidak hilang kalau HP rusak / cache browser terhapus,
+- sama di HP dan laptop,
+- punya riwayat versi (halaman gist → Revisions) untuk mengembalikan data lama.
+
+Cara pasang:
+1. Buat token klasik di https://github.com/settings/tokens/new?scopes=gist dengan izin
+   **gist saja**; atur kedaluwarsa sampai setelah sidang.
+2. Perangkat pertama: tempel token, Gist ID dikosongkan → gist dibuat otomatis.
+3. Perangkat lain: tempel token yang sama + Gist ID (atau URL gist) dari perangkat pertama.
+
+Cara kerja: tetap offline-first. Setiap perubahan dicatat waktu ubahnya per item
+(`S.ts`). Saat sinkron (2,5 s setelah perubahan, saat aplikasi dibuka, saat internet
+kembali), aplikasi mengambil gist, menggabungkan per item (yang paling baru diubah
+menang), lalu mengirim balik bila ada yang lebih baru di perangkat. Token disimpan
+terpisah di perangkat (`edrones-sync-v1`), tidak ikut file ekspor maupun gist.
 
 ## Menjalankan
 
