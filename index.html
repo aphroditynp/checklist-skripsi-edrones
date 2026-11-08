@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f5f8b">
+<title>Checklist Skripsi Edrones</title>
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+:root{
+  --bg:#f5f6f8; --card:#fff; --fg:#1b1f24; --muted:#667085; --line:#e3e6ea;
+  --acc:#1f5f8b; --acc-soft:#e3eef6; --ok:#1e7d4f; --ok-soft:#e2f3ea;
+  --warn:#9a5b00; --warn-soft:#fff1d6; --bad:#b42318; --bad-soft:#fde4e2;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#111418; --card:#1a1e24; --fg:#e8eaed; --muted:#98a2b3; --line:#2a3038;
+    --acc:#6fb1e0; --acc-soft:#1c2c3a; --ok:#5cc98f; --ok-soft:#173226;
+    --warn:#f0b54d; --warn-soft:#352812; --bad:#f2786b; --bad-soft:#3a1c19;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);
+  padding:env(safe-area-inset-top) 0 0}
+header h1{font-size:16px;margin:0;padding:10px 14px 4px}
+header .sub{font-size:12px;color:var(--muted);padding:0 14px 6px}
+nav{display:flex;overflow-x:auto;gap:4px;padding:0 10px 8px;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav button{flex:0 0 auto;border:1px solid var(--line);background:var(--bg);color:var(--fg);
+  border-radius:999px;padding:6px 12px;font-size:13px}
+nav button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+nav button .n{opacity:.75;font-size:11px;margin-left:4px}
+main{padding:12px 12px calc(40px + env(safe-area-inset-bottom));max-width:760px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.card h2{font-size:15px;margin:0 0 8px}
+.card h3{font-size:13px;margin:12px 0 4px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.muted{color:var(--muted);font-size:13px}
+.item{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)}
+.item:first-of-type{border-top:0}
+.item input[type=checkbox]{width:22px;height:22px;flex:0 0 22px;margin:0;accent-color:var(--ok)}
+.item label{flex:1;cursor:pointer}
+.item.done label{color:var(--muted);text-decoration:line-through}
+.item .del{border:0;background:none;color:var(--muted);font-size:18px;padding:0 4px}
+.add{display:flex;gap:6px;margin-top:8px}
+.add input{flex:1}
+input[type=text],input[type=number],input[type=date],input[type=time],select,textarea{
+  width:100%;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);
+  border-radius:8px;padding:7px 9px}
+textarea{min-height:60px;resize:vertical}
+.btn{border:1px solid var(--acc);background:var(--acc);color:#fff;border-radius:8px;padding:7px 12px;font:inherit;font-size:14px}
+.btn.ghost{background:transparent;color:var(--acc)}
+.btn.small{padding:4px 9px;font-size:12px}
+.btn.danger{border-color:var(--bad);color:var(--bad);background:transparent}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid label{font-size:12px;color:var(--muted);display:block}
+.grid .full{grid-column:1/-1}
+.bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--ok);border-radius:99px}
+.prog{margin:8px 0}
+.prog .t{display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px}
+.note{border-radius:8px;padding:8px 10px;font-size:13px;margin:8px 0}
+.note.warn{background:var(--warn-soft);color:var(--warn)}
+.note.bad{background:var(--bad-soft);color:var(--bad)}
+.note.info{background:var(--acc-soft);color:var(--acc)}
+.note.ok{background:var(--ok-soft);color:var(--ok)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{border-bottom:1px solid var(--line);padding:5px 4px;text-align:left;vertical-align:top}
+code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;background:var(--acc-soft);padding:1px 4px;border-radius:4px}
+pre.cmd{white-space:pre-wrap;word-break:break-all;font:12px ui-monospace,Menlo,monospace;
+  background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin:4px 0}
+details.fl{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:10px}
+details.fl>summary{list-style:none;padding:11px 14px;display:flex;align-items:center;gap:10px;cursor:pointer}
+details.fl>summary::-webkit-details-marker{display:none}
+details.fl .body{padding:0 14px 12px}
+.code{font-weight:700;min-width:40px}
+.tag{font-size:11px;border-radius:99px;padding:2px 8px;background:var(--acc-soft);color:var(--acc);white-space:nowrap}
+.st-selesai{background:var(--ok-soft);color:var(--ok)}
+.st-ulang{background:var(--warn-soft);color:var(--warn)}
+.st-batal{background:var(--bad-soft);color:var(--bad)}
+.st-belum{background:var(--line);color:var(--muted)}
+.big{font-size:28px;font-weight:700}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;text-align:center}
+.kpis div{background:var(--bg);border-radius:8px;padding:6px 2px}
+.kpis b{display:block;font-size:17px}
+.kpis span{font-size:11px;color:var(--muted)}
+.spacer{flex:1}
+ol.steps{margin:4px 0;padding-left:20px}
+ol.steps li{margin:3px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>✈️ Checklist Skripsi Edrones</h1>
+  <div class="sub" id="sub"></div>
+  <nav id="tabs"></nav>
+</header>
+<main id="main"></main>
+
+<script>
+"use strict";
+/* ================= DATA ================= */
+const KEY = "edrones-checklist-v1";
+const REPO_URL = "https://github.com/SKRIPSI-FIXEDWING/flightcontroller-Edrones";
+const DEFAULT_DIR = "~/flightcontroller-Edrones";
+
+const TABS = [
+  {id:"ringkasan", t:"Ringkasan"},
+  {id:"persiapan", t:"Persiapan"},
+  {id:"hari", t:"Hari terbang"},
+  {id:"terbang", t:"Terbang"},
+  {id:"analisis", t:"Analisis"},
+  {id:"skripsi", t:"Skripsi"},
+  {id:"sidang", t:"Sidang"},
+];
+
+const PARAMS = [
+  ["LOIT_BANK_DEG","45","dulu 35 (live)"],
+  ["ROLL_LIMIT_DEG","40","tetap"],
+  ["WP_LOITER_RAD","100","grup radius kecil: 80"],
+  ["WP_RADIUS","15","tetap"],
+  ["NAVL1_PERIOD","14","dulu default 22"],
+  ["NAVL1_DAMPING","0.707","tetap"],
+  ["FUZZY_MIN_PER / MAX_PER","12 / 16","tetap"],
+  ["FUZZY_ENABLE","1 / 0","ganti per terbang (live)"],
+  ["NAV_PID_ENABLE","0","hanya 1 di P1 (live)"],
+  ["NAV_PID_KP / KD / KI","0.2014 / 0.6347 / 0.0101","default, jangan diubah"],
+  ["DIST_ENABLE","1","live"],
+  ["DIST_US","+300","ganti −300 di tengah loiter"],
+  ["DIST_MS","2000",""],
+  ["LOIT_ROLL_SIGN","1","jangan diubah"],
+  ["AIRSPEED_CRUISE","18","tetap"],
+];
+
+// Grup checklist statis per tab. editable = boleh tambah item sendiri.
+const GROUPS = {
+  persiapan: [
+    {id:"fw", title:"Firmware (sekali)", items:[
+      "Firmware berisi <b>radius loiter tetap</b> (commit <code>0f4c961</code>) dan <b>FBWA me-reset misi</b>.",
+      "Firmware berisi <b>navigasi PID</b> (<code>NAV_PID_*</code>, default mati). Lihat <code>docs/navigation-pid.md</code>.",
+      "Build lalu flash ke Teensy, cek versi di Mission Planner.",
+    ]},
+    {id:"param", title:"B. Parameter", params:true, items:[
+      "Semua parameter di tabel sudah ditulis (Write Params).",
+      "Refresh Params: <code>LOIT_BANK_DEG</code> = 45, <code>NAVL1_PERIOD</code> = 14, <code>NAV_PID_ENABLE</code> = 0.",
+    ]},
+    {id:"misi", title:"C. Misi", info:
+      "WP1 = titik awal (leg pesawat → WP1 tidak dinilai). Leg ke 4 arah U/T/S/B, masing-masing <b>≥ 200 m</b>. " +
+      "Item terakhir <b>LOITER_TURNS</b> (MAV_CMD 18), CW, kolom radius 0. R100: 4 putaran, R80: 8 putaran. " +
+      "Lingkaran 100 m butuh area ±220 m bebas pohon/gedung.",
+      items:[
+      "Misi R100 dibuat dan disimpan sebagai file <code>.waypoints</code>.",
+      "Misi R100 di-upload dan di-Read ulang untuk dicek.",
+      "Misi R80 siap (WP_LOITER_RAD 80, 8 putaran).",
+      "Cetak / siapkan lembar catatan terbang (atau pakai tab Terbang di aplikasi ini).",
+    ], editable:true},
+  ],
+  hari: [
+    {id:"sebelum", title:"Sebelum berangkat", items:[
+      "Kartu SD kosong / cukup ruang.",
+      "Baterai terbang penuh (hitung sesuai jumlah terbang hari ini).",
+      "Baterai remote dan telemetri penuh.",
+      "Laptop Mission Planner + charger, file <code>.waypoints</code> ada.",
+      "Cek prakiraan angin. Grup R80 hanya jika angin ≤ 4 m/s.",
+    ], editable:true},
+    {id:"u1", title:"E. Uji awal U1 (wajib tiap hari)", items:[
+      "Jam GPS Here4 dapat fix (nama file log sesuai tanggal).",
+      "Darat: CH7 RENDAH ≥ 1 s lalu TINGGI → aileron bergeser 2 s <b>searah stick roll kanan</b>. Terbalik → <b>jangan terbang</b>.",
+      "Darat: AUTO, set WP 3 dari MP, pindah FBWA, AUTO lagi → WP aktif kembali ke <b>1</b>.",
+      "Udara: loiter, <code>LOIT_RAD</code> di MP tetap <b>100</b> (tidak naik ke 110+).",
+      "Udara: 2–3 gangguan +300 µs di loiter, pulih aman, roll ≤ ±55°.",
+      "Kalau terlalu agresif: turunkan <code>DIST_US</code> ke 250 atau <code>LOIT_BANK_DEG</code> ke 42 dan pakai untuk semua terbang berikutnya (catat!).",
+    ]},
+  ],
+  analisis: [
+    {id:"rekap", title:"Rekap & perbandingan", items:[
+      "Data lama (19–29 Okt) dipisah sebagai <b>uji pendahuluan</b>, tidak dicampur.",
+      "Satu tabel rekap metrik per terbang (galat lintas, puncak, waktu pulih, per arah gangguan).",
+      "Fuzzy vs L1 tetap (R100): rata-rata ± simpangan baku dari 5 terbang.",
+      "PID (P1) dibandingkan dengan F dan L di hari yang sama.",
+      "Fuzzy vs L1 tetap pada R80 (FK vs LK).",
+      "Gangguan +300 vs −300 µs dibahas terpisah.",
+      "Grafik perbandingan akhir siap untuk Bab 4 (<code>compare_loiter_flights.py</code>).",
+    ], editable:true},
+  ],
+  skripsi: [
+    {id:"bab123", title:"Bab 1–3 (penyesuaian)", items:[
+      "Bab 1: rumusan masalah & tujuan sesuai perbandingan fuzzy / L1 tetap / PID.",
+      "Bab 2: dasar teori L1, fuzzy tuner, PID navigasi lengkap.",
+      "Bab 3: metode akhir (radius tetap, NAVL1_PERIOD 14, gangguan ±300 µs 2 s).",
+      "Bab 3: prosedur uji & daftar terbang (18 terbang, urutan selang-seling).",
+    ], editable:true},
+    {id:"bab4", title:"Bab 4 Hasil dan Pembahasan", items:[
+      "Hasil uji pendahuluan (19–29 Okt).",
+      "Hasil leg lurus U/T/S/B: fuzzy vs L1 tetap vs PID.",
+      "Hasil loiter R100: gangguan +300 dan −300 µs.",
+      "Hasil loiter R80: fuzzy vs L1 tetap.",
+      "Tabel rekap metrik (rata-rata ± simpangan baku).",
+      "Grafik respons per gangguan dipilih dan diberi keterangan.",
+      "Pembahasan: pengaruh angin, kapan fuzzy unggul / kalah.",
+      "Keterbatasan penelitian.",
+    ], editable:true},
+    {id:"bab5", title:"Bab 5 & bagian depan", items:[
+      "Kesimpulan menjawab setiap rumusan masalah (dengan angka).",
+      "Saran penelitian lanjutan.",
+      "Abstrak Indonesia & Inggris.",
+      "Daftar pustaka dan sitasi dicek.",
+      "Format: margin, nomor gambar/tabel, daftar isi otomatis.",
+    ], editable:true},
+    {id:"bimbingan", title:"Bimbingan & revisi", items:[
+      "Kirim draf Bab 4 ke pembimbing.",
+      "Revisi Bab 4 selesai.",
+      "Draf lengkap dikirim.",
+      "ACC pembimbing 1.",
+      "ACC pembimbing 2.",
+    ], editable:true},
+  ],
+  sidang: [
+    {id:"daftar", title:"Pendaftaran & berkas", items:[
+      "Cek syarat sidang dari prodi (berkas, batas waktu).",
+      "Lembar persetujuan pembimbing ditandatangani.",
+      "Cek plagiarisme (jika disyaratkan).",
+      "Berkas pendaftaran sidang dikumpulkan.",
+      "Jadwal & penguji sudah keluar.",
+      "Naskah dikirim ke penguji.",
+    ], editable:true},
+    {id:"slide", title:"Slide presentasi", items:[
+      "Kerangka: latar belakang, tujuan, metode, hasil, kesimpulan.",
+      "Diagram sistem (Teensy, sensor, mode, L1 + fuzzy).",
+      "Grafik hasil utama & tabel rekap.",
+      "Video terbang / animasi lintasan.",
+      "Slide cadangan: parameter, aturan fuzzy, gain PID, data mentah.",
+    ], editable:true},
+    {id:"latihan", title:"Latihan", items:[
+      "Latihan sendiri sesuai batas waktu.",
+      "Latihan di depan teman / pembimbing.",
+      "Daftar kemungkinan pertanyaan + jawaban.",
+      "Bawa: laptop, charger, adaptor HDMI, flashdisk cadangan, naskah cetak.",
+    ], editable:true},
+    {id:"pasca", title:"Setelah sidang", items:[
+      "Catat semua revisi dari penguji.",
+      "Revisi selesai dan di-ACC.",
+      "Lembar pengesahan & unggah repositori.",
+    ], editable:true},
+  ],
+};
+
+// Daftar terbang (urutan selang-seling sesuai bagian G)
+const FLIGHTS = (() => {
+  const mk = (code, m, fz, pid, r, data=true) => ({code, m, fz, pid, r, data});
+  const a = [mk("U1","L1 tetap",0,0,100,false)];
+  for (let i=1;i<=5;i++){ a.push(mk("F"+i,"Fuzzy",1,0,100)); a.push(mk("L"+i,"L1 tetap",0,0,100)); }
+  a.push(mk("P1","PID",0,1,100));
+  for (let i=1;i<=3;i++){ a.push(mk("FK"+i,"Fuzzy",1,0,80)); a.push(mk("LK"+i,"L1 tetap",0,0,80)); }
+  return a;
+})();
+
+function flightSteps(f){
+  const pre = [
+    `<code>FUZZY_ENABLE</code> = <b>${f.fz}</b>, <code>NAV_PID_ENABLE</code> = <b>${f.pid}</b>` +
+      (f.pid ? ` → cek pesan "NAV: PID ON".` : "."),
+    `<code>WP_LOITER_RAD</code> = <b>${f.r}</b>` + (f.r===80 ? " dan misi 8 putaran." : "."),
+    `<code>DIST_US</code> = <b>+300</b>.`,
+    `CH7 di posisi <b>RENDAH</b>.`,
+    `Catat jam, baterai, perkiraan angin (form di bawah).`,
+  ];
+  const air = f.r===100 ? [
+    "Takeoff FBWA, naik ke ketinggian misi.",
+    "Masuk <b>AUTO</b> (misi mulai dari WP1).",
+    "Leg pesawat → WP1: <b>tanpa gangguan</b>.",
+    "Leg U, T, S, B: <b>1 gangguan per leg</b> saat sudah lurus di garis, jangan menjelang WP.",
+    "Loiter putaran 1: gangguan di sisi <b>utara</b> dan <b>selatan</b>.",
+    "Loiter putaran 2: sisi <b>timur</b> dan <b>barat</b>.",
+    "Ubah <code>DIST_US</code> ke <b>−300</b> dari MP.",
+    "Putaran 3: sisi U dan S. Putaran 4: sisi T dan B.",
+    "Jeda antar gangguan <b>≥ 15 detik</b>.",
+    "Pindah ke <b>FBWA</b> (misi di-reset), mendarat.",
+  ] : [
+    "Takeoff FBWA, masuk AUTO, langsung ke loiter (leg tanpa gangguan).",
+    "Putaran 1–4: <code>DIST_US</code> +300, <b>1 gangguan per putaran</b> di sisi U, T, S, B.",
+    "Ubah <code>DIST_US</code> ke <b>−300</b>.",
+    "Putaran 5–8: sisi U, T, S, B lagi.",
+    "Jeda antar gangguan <b>≥ 15 detik</b>.",
+    "Pindah ke <b>FBWA</b>, mendarat.",
+  ];
+  const post = [
+    "Kembalikan <code>DIST_US</code> ke +300.",
+    "Ganti <code>FUZZY_ENABLE</code> sesuai terbang berikutnya.",
+  ];
+  if (f.pid) post.push("<code>NAV_PID_ENABLE</code> kembali <b>0</b> (cek pesan \"NAV: L1 (PID OFF)\").");
+  post.push("Form catatan terbang terisi, status diubah.");
+  return {pre, air, post};
+}
+
+function analysisSteps(f){
+  const py = `cd ${S.projectDir || DEFAULT_DIR} && python tools/flight_analysis/`;
+  const out = "flight_" + (logOf(f.code).tanggal || "YYYY-MM-DD") + "_" + f.code;
+  const s = [
+    {t:"Log SD disalin ke laptop, nama file dicatat.", cmd:null},
+    {t:"Analisis gangguan dari log SD.",
+      cmd:`${py}analyze_sdlog_gangguan_kecepatan.py ${logOf(f.code).sd || "LOG.CSV"} -o ${out} --radius ${f.r} --bank 45`},
+  ];
+  if (f.fz) s.push({t:"Analisis fuzzy.", cmd:`${py}analyze_fuzzy_sdlog.py ${logOf(f.code).sd || "LOG.CSV"}`});
+  s.push({t:"Analisis tlog loiter.", cmd:`${py}analyze_tlog_loiter.py ${logOf(f.code).tlog || "FILE.tlog"}`});
+  if (f.r===100) s.push({t:"Analisis tlog L1 AUTO (leg).", cmd:`${py}analyze_tlog_l1_auto.py ${logOf(f.code).tlog || "FILE.tlog"}`});
+  s.push({t:"Grafik dicek: jumlah gangguan sesuai catatan, tidak ada yang terlewat/ganda.", cmd:null});
+  s.push({t:"Metrik dimasukkan ke tabel rekap.", cmd:null});
+  return s;
+}
+
+const LOG_FIELDS = [
+  ["tanggal","Tanggal","date"],["jam","Jam","time"],
+  ["tlog","File tlog","text"],["sd","File log SD","text"],
+  ["angin","Angin (m/s)","number"],["arah","Angin dari","text"],
+  ["batAwal","Baterai awal (V/%)","text"],["batAkhir","Baterai akhir (V/%)","text"],
+  ["gPlus","Gangguan + (jumlah)","number"],["gMin","Gangguan − (jumlah)","number"],
+];
+const STATUS = {belum:"Belum", selesai:"Selesai", ulang:"Perlu diulang", batal:"Batal"};
+
+/* ================= STATE ================= */
+function fresh(){ return {checks:{}, flights:{}, days:[], custom:{}, sidang:"", tab:"ringkasan", open:{}, projectDir:DEFAULT_DIR}; }
+let S;
+try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = fresh(); }
+function save(){ localStorage.setItem(KEY, JSON.stringify(S)); updateHeader(); }
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const logOf = code => (S.flights[code] ||= {status:"belum", log:{}}).log;
+const flOf = code => (S.flights[code] ||= {status:"belum", log:{}});
+
+/* ================= HITUNG PROGRES ================= */
+function groupItemIds(prefix, g){
+  const ids = g.items.map((_,i)=>`${prefix}${g.id}:${i}`);
+  (S.custom[prefix+g.id] || []).forEach(c => ids.push(`${prefix}${g.id}:c:${c.id}`));
+  return ids;
+}
+function countIds(ids){ return [ids.filter(id=>S.checks[id]).length, ids.length]; }
+function progGroups(tab, prefix=""){
+  let d=0,t=0; GROUPS[tab].forEach(g=>{ const [a,b]=countIds(groupItemIds(prefix,g)); d+=a; t+=b; }); return [d,t];
+}
+function progress(){
+  const p = {};
+  p.persiapan = progGroups("persiapan");
+  const dataFlights = FLIGHTS.filter(f=>f.data);
+  p.terbang = [dataFlights.filter(f=>flOf(f.code).status==="selesai").length, dataFlights.length];
+  let ad=0, at=0;
+  dataFlights.forEach(f=>{ analysisSteps(f).forEach((_,i)=>{ at++; if (S.checks[`an:${f.code}:${i}`]) ad++; }); });
+  const r = progGroups("analisis"); p.analisis = [ad+r[0], at+r[1]];
+  p.skripsi = progGroups("skripsi");
+  p.sidang = progGroups("sidang");
+  return p;
+}
+
+/* ================= RENDER ================= */
+const $main = document.getElementById("main");
+
+function updateHeader(){
+  const p = progress();
+  let d=0,t=0; Object.values(p).forEach(([a,b])=>{d+=a;t+=b;});
+  let s = `Total ${Math.round(100*d/Math.max(t,1))}% · terbang ${p.terbang[0]}/${p.terbang[1]}`;
+  const dd = daysTo(S.sidang); if (dd!==null) s += ` · sidang ${dd>=0 ? "H-"+dd : "sudah lewat"}`;
+  document.getElementById("sub").textContent = s;
+  document.getElementById("tabs").innerHTML = TABS.map(x => {
+    const pr = p[x.id];
+    const n = pr ? `<span class="n">${pr[0]}/${pr[1]}</span>` : (x.id==="hari" ? `<span class="n">${S.days.length}</span>` : "");
+    return `<button data-tab="${x.id}" class="${S.tab===x.id?"on":""}">${x.t}${n}</button>`;
+  }).join("");
+}
+function daysTo(dateStr){
+  if (!dateStr) return null;
+  const t = new Date(dateStr+"T00:00:00"), n = new Date(); n.setHours(0,0,0,0);
+  return Math.round((t-n)/86400000);
+}
+
+function itemHtml(id, html, removable){
+  const on = !!S.checks[id];
+  return `<div class="item ${on?"done":""}">
+    <input type="checkbox" id="${esc(id)}" data-check="${esc(id)}" ${on?"checked":""}>
+    <label for="${esc(id)}">${html}</label>
+    ${removable ? `<button class="del" data-delcustom="${esc(removable)}" title="Hapus">×</button>` : ""}
+  </div>`;
+}
+function groupHtml(g, prefix=""){
+  const ids = groupItemIds(prefix, g); const [d,t] = countIds(ids);
+  let h = `<div class="card"><div class="row"><h2>${g.title}</h2><span class="spacer"></span><span class="muted">${d}/${t}</span></div>`;
+  if (g.info) h += `<div class="note info">${g.info}</div>`;
+  if (g.params) h += `<table><tr><th>Parameter</th><th>Nilai</th><th>Catatan</th></tr>` +
+    PARAMS.map(r=>`<tr><td><code>${r[0]}</code></td><td><b>${r[1]}</b></td><td class="muted">${r[2]}</td></tr>`).join("") + `</table>`;
+  g.items.forEach((txt,i)=> h += itemHtml(`${prefix}${g.id}:${i}`, txt));
+  (S.custom[prefix+g.id]||[]).forEach(c => h += itemHtml(`${prefix}${g.id}:c:${c.id}`, esc(c.text), `${prefix+g.id}|${c.id}`));
+  if (g.editable) h += `<div class="add"><input type="text" placeholder="Tambah item…" data-addinput="${esc(prefix+g.id)}">
+    <button class="btn small" data-add="${esc(prefix+g.id)}">Tambah</button></div>`;
+  return h + `</div>`;
+}
+function progHtml(label, [d,t]){
+  const pct = Math.round(100*d/Math.max(t,1));
+  return `<div class="prog"><div class="t"><span>${label}</span><span class="muted">${d}/${t} · ${pct}%</span></div><div class="bar"><i style="width:${pct}%"></i></div></div>`;
+}
+
+function nextFlight(){ return FLIGHTS.find(f => !["selesai","batal"].includes(flOf(f.code).status)); }
+
+const VIEWS = {
+  ringkasan(){
+    const p = progress(); const dd = daysTo(S.sidang);
+    const grp = k => { const fs = FLIGHTS.filter(f=>f.data && f.code.replace(/\d+$/,"")===k);
+      return `${fs.filter(f=>flOf(f.code).status==="selesai").length}/${fs.length}`; };
+    const nf = nextFlight();
+    let h = `<div class="card"><h2>Tanggal sidang</h2>
+      <div class="row" style="align-items:center"><input type="date" data-sidang value="${esc(S.sidang)}" style="max-width:180px">
+      <span class="big">${dd===null ? "–" : dd>0 ? "H-"+dd : dd===0 ? "Hari ini!" : "Selesai"}</span></div>
+      ${dd===null ? `<div class="muted">Isi tanggal sidang (perkiraan juga boleh) untuk hitung mundur.</div>` : ""}</div>`;
+    h += `<div class="card"><h2>Progres</h2>` +
+      progHtml("Persiapan", p.persiapan) + progHtml("Terbang (data)", p.terbang) +
+      progHtml("Analisis", p.analisis) + progHtml("Skripsi", p.skripsi) + progHtml("Sidang", p.sidang) + `</div>`;
+    h += `<div class="card"><h2>Terbang per grup</h2><div class="kpis">
+      <div><b>${grp("F")}</b><span>Fuzzy</span></div><div><b>${grp("L")}</b><span>L1 tetap</span></div>
+      <div><b>${grp("P")}</b><span>PID</span></div><div><b>${grp("FK")}</b><span>Fuzzy R80</span></div>
+      <div><b>${grp("LK")}</b><span>L1 R80</span></div></div>
+      ${nf ? `<div class="note info">Berikutnya: <b>${nf.code}</b> · ${nf.m} · R${nf.r} · FUZZY ${nf.fz} / PID ${nf.pid}
+        <button class="btn small" style="margin-left:6px" data-goflight="${nf.code}">Buka</button></div>`
+           : `<div class="note ok">Semua terbang selesai 🎉</div>`}</div>`;
+    h += `<div class="card"><h2>Project flight controller</h2>
+      <div class="muted">Isi checklist terbang mengikuti <code>docs/checklist-terbang-november-2026.md</code> di project ini.</div>
+      <div class="row" style="margin:8px 0"><a class="btn ghost small" href="${REPO_URL}" target="_blank" rel="noopener">Repo GitHub</a>
+        <a class="btn ghost small" href="${REPO_URL}/blob/master/docs/checklist-terbang-november-2026.md" target="_blank" rel="noopener">Checklist di repo</a></div>
+      <label class="muted">Folder project di laptop (dipakai di perintah analisis)</label>
+      <input type="text" data-projectdir value="${esc(S.projectDir || DEFAULT_DIR)}"></div>`;
+    h += `<div class="card"><h2>Cadangan data</h2>
+      <div class="muted">Data tersimpan di browser HP ini saja. Ekspor rutin supaya tidak hilang.</div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" data-act="export">Ekspor cadangan (JSON)</button>
+        <button class="btn ghost" data-act="csv">Ekspor catatan terbang (CSV)</button>
+        <button class="btn ghost" data-act="import">Impor JSON</button>
+        <button class="btn danger" data-act="reset">Hapus semua</button>
+      </div></div>`;
+    return h;
+  },
+  persiapan(){ return GROUPS.persiapan.map(g=>groupHtml(g)).join(""); },
+  hari(){
+    let h = `<div class="card"><h2>Hari terbang</h2><div class="muted">Tambah satu entri tiap ke lapangan. Uji U1 diulang tiap hari.</div>
+      <div class="add"><input type="date" id="newDay" value="${new Date().toISOString().slice(0,10)}">
+      <button class="btn small" data-act="addday">Tambah hari</button></div></div>`;
+    [...S.days].reverse().forEach(day => {
+      const pre = `day:${day.id}:`;
+      const flown = FLIGHTS.filter(f => logOf(f.code).tanggal === day.date).map(f=>f.code);
+      h += `<details class="fl" ${S.open["d"+day.id]?"open":""} data-openkey="d${day.id}"><summary>
+        <span class="code">${esc(day.date)}</span><span class="muted">${flown.length ? flown.join(", ") : "belum ada terbang"}</span>
+        <span class="spacer"></span><span class="tag">${progGroups("hari",pre).join("/")}</span></summary><div class="body">
+        <div class="grid"><div><label>Angin (m/s)</label><input type="text" data-dayfield="${day.id}|angin" value="${esc(day.angin)}"></div>
+        <div><label>Lokasi</label><input type="text" data-dayfield="${day.id}|lokasi" value="${esc(day.lokasi)}"></div>
+        <div class="full"><label>Catatan hari ini (perubahan parameter, dll.)</label><textarea data-dayfield="${day.id}|catatan">${esc(day.catatan)}</textarea></div></div>
+        ${Number(day.angin) > 4 ? `<div class="note warn">Angin > 4 m/s: jangan terbang grup R80 (FK/LK) hari ini.</div>` : ""}
+        ${GROUPS.hari.map(g=>groupHtml(g,pre)).join("")}
+        <button class="btn danger small" data-delday="${day.id}">Hapus hari ini</button></div></details>`;
+    });
+    return h;
+  },
+  terbang(){
+    let h = `<div class="card"><h2>Daftar terbang</h2><div class="muted">Urutan selang-seling F → L supaya angin tidak tercampur ke hasil.
+      P1 setelah F dan L berhasil di hari yang sama. R80 hanya angin ≤ 4 m/s.</div></div>`;
+    FLIGHTS.forEach(f => {
+      const fl = flOf(f.code), st = fl.status, lg = fl.log, steps = flightSteps(f);
+      const sec = (name, arr) => `<h3>${name}</h3>` + arr.map((t,i)=>itemHtml(`fl:${f.code}:${name}:${i}`, t)).join("");
+      const warns = [];
+      if (f.r===80 && Number(lg.angin) > 4) warns.push(`<div class="note bad">Angin ${esc(lg.angin)} m/s > 4: tunda grup R80.</div>`);
+      if (f.pid) {
+        const same = FLIGHTS.filter(x => x.code!=="P1" && /^[FL]\d$/.test(x.code) && flOf(x.code).status==="selesai" && lg.tanggal && logOf(x.code).tanggal===lg.tanggal);
+        const okF = same.some(x=>x.code[0]==="F"), okL = same.some(x=>x.code[0]==="L");
+        if (!(okF && okL)) warns.push(`<div class="note warn">P1 sebaiknya setelah minimal satu F dan satu L selesai di tanggal yang sama.</div>`);
+      }
+      if (!f.data) warns.push(`<div class="note info">Uji awal, tidak masuk data. Lihat checklist U1 di tab Hari terbang.</div>`);
+      h += `<details class="fl" id="fl-${f.code}" ${S.open[f.code]?"open":""} data-openkey="${f.code}"><summary>
+        <span class="code">${f.code}</span><span>${f.m} · R${f.r}</span><span class="spacer"></span>
+        <span class="tag st-${st}">${STATUS[st]}</span></summary><div class="body">
+        <div class="row" style="gap:4px;margin-bottom:6px"><span class="tag">FUZZY_ENABLE ${f.fz}</span><span class="tag">NAV_PID_ENABLE ${f.pid}</span><span class="tag">WP_LOITER_RAD ${f.r}</span></div>
+        ${warns.join("")}
+        ${sec("Sebelum takeoff", steps.pre)}${sec("Di udara", steps.air)}${sec("Setelah mendarat", steps.post)}
+        <h3>Catatan terbang</h3><div class="grid">
+        ${LOG_FIELDS.map(([k,l,t])=>`<div><label>${l}</label><input type="${t}" ${t==="number"?'inputmode="decimal" step="any"':""} data-logfield="${f.code}|${k}" value="${esc(lg[k])}"></div>`).join("")}
+        <div class="full"><label>Catatan (telemetri putus, keluar loiter, dll.)</label><textarea data-logfield="${f.code}|catatan">${esc(lg.catatan)}</textarea></div>
+        <div class="full"><label>Status</label><select data-status="${f.code}">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===st?"selected":""}>${v}</option>`).join("")}</select></div>
+        </div></div></details>`;
+    });
+    return h;
+  },
+  analisis(){
+    let h = GROUPS.analisis.map(g=>groupHtml(g)).join("");
+    const done = FLIGHTS.filter(f => f.data && flOf(f.code).status==="selesai");
+    h += `<div class="card"><h2>Per terbang</h2><div class="muted">Muncul setelah status terbang = Selesai. Perintah sudah termasuk <code>cd</code> ke folder project (atur di tab Ringkasan).</div></div>`;
+    if (!done.length) h += `<div class="note info">Belum ada terbang yang selesai.</div>`;
+    done.forEach(f => {
+      const steps = analysisSteps(f);
+      const d = steps.filter((_,i)=>S.checks[`an:${f.code}:${i}`]).length;
+      h += `<details class="fl" ${S.open["an"+f.code]?"open":""} data-openkey="an${f.code}"><summary><span class="code">${f.code}</span>
+        <span>${f.m} · R${f.r}</span><span class="spacer"></span><span class="tag ${d===steps.length?"st-selesai":""}">${d}/${steps.length}</span></summary><div class="body">` +
+        steps.map((s,i)=> itemHtml(`an:${f.code}:${i}`, esc(s.t)) +
+          (s.cmd ? `<pre class="cmd">${esc(s.cmd)}</pre><button class="btn ghost small" data-copy="${esc(s.cmd)}">Salin perintah</button>` : "")).join("") +
+        `</div></details>`;
+    });
+    return h;
+  },
+  skripsi(){ return GROUPS.skripsi.map(g=>groupHtml(g)).join(""); },
+  sidang(){ return GROUPS.sidang.map(g=>groupHtml(g)).join(""); },
+};
+
+function render(){
+  updateHeader();
+  const y = window.scrollY;
+  $main.innerHTML = VIEWS[S.tab]();
+  window.scrollTo(0, y);
+}
+
+/* ================= EVENTS ================= */
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-tab],[data-add],[data-delcustom],[data-act],[data-delday],[data-goflight],[data-copy]");
+  if (!b) return;
+  const d = b.dataset;
+  if (d.tab){ S.tab = d.tab; save(); render(); window.scrollTo(0,0); }
+  else if (d.add){ addCustom(d.add); }
+  else if (d.delcustom){
+    const [g,id] = d.delcustom.split("|");
+    if (!confirm("Hapus item ini?")) return;
+    S.custom[g] = (S.custom[g]||[]).filter(c=>c.id!==id); save(); render();
+  }
+  else if (d.delday){
+    if (!confirm("Hapus hari terbang ini beserta checklist-nya?")) return;
+    S.days = S.days.filter(x=>x.id!==d.delday);
+    Object.keys(S.checks).forEach(k=>{ if (k.startsWith(`day:${d.delday}:`)) delete S.checks[k]; });
+    save(); render();
+  }
+  else if (d.goflight){ S.tab="terbang"; S.open[d.goflight]=true; save(); render();
+    document.getElementById("fl-"+d.goflight)?.scrollIntoView({behavior:"smooth"}); }
+  else if (d.copy){ navigator.clipboard?.writeText(d.copy).then(()=>{ b.textContent="Tersalin ✓"; setTimeout(()=>b.textContent="Salin perintah",1500); }); }
+  else if (d.act) ACTIONS[d.act]();
+});
+document.addEventListener("change", e => {
+  const t = e.target, d = t.dataset;
+  if (d.check){ S.checks[d.check] = t.checked; if (!t.checked) delete S.checks[d.check];
+    t.closest(".item")?.classList.toggle("done", t.checked); save(); }
+  else if (d.status){ flOf(d.status).status = t.value; save(); render(); }
+  else if (d.sidang !== undefined){ S.sidang = t.value; save(); render(); }
+});
+document.addEventListener("input", e => {
+  const t = e.target, d = t.dataset;
+  if (d.logfield){ const [c,k] = d.logfield.split("|"); logOf(c)[k] = t.value; save(); }
+  else if (d.projectdir !== undefined){ S.projectDir = t.value.trim() || DEFAULT_DIR; save(); }
+  else if (d.dayfield){ const [id,k] = d.dayfield.split("|"); const day = S.days.find(x=>x.id===id); if (day){ day[k]=t.value; save(); } }
+});
+// Re-render setelah field angin / tanggal selesai diisi (untuk peringatan)
+document.addEventListener("focusout", e => {
+  const d = e.target.dataset;
+  if ((d.logfield && /\|(angin|tanggal)$/.test(d.logfield)) || (d.dayfield && /\|angin$/.test(d.dayfield))) render();
+});
+document.addEventListener("keydown", e => { if (e.key==="Enter" && e.target.dataset.addinput) addCustom(e.target.dataset.addinput); });
+document.addEventListener("toggle", e => {
+  const k = e.target.dataset?.openkey; if (!k) return;
+  if (e.target.open) S.open[k]=true; else delete S.open[k];
+  localStorage.setItem(KEY, JSON.stringify(S));
+}, true);
+
+function addCustom(g){
+  const inp = document.querySelector(`[data-addinput="${CSS.escape(g)}"]`);
+  const text = inp.value.trim(); if (!text) return;
+  (S.custom[g] ||= []).push({id:uid(), text}); save(); render();
+}
+
+function download(name, text, type){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], {type}));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+const today = () => new Date().toISOString().slice(0,10);
+const ACTIONS = {
+  export(){ download(`checklist-skripsi-${today()}.json`, JSON.stringify(S,null,2), "application/json"); },
+  csv(){
+    const cols = ["kode","metode","fuzzy","pid","radius","status",...LOG_FIELDS.map(x=>x[0]),"catatan"];
+    const q = v => `"${String(v??"").replace(/"/g,'""')}"`;
+    const rows = FLIGHTS.map(f => { const fl = flOf(f.code);
+      return [f.code,f.m,f.fz,f.pid,f.r,STATUS[fl.status],...LOG_FIELDS.map(x=>fl.log[x[0]]),fl.log.catatan].map(q).join(","); });
+    download(`catatan-terbang-${today()}.csv`, "﻿" + [cols.join(","), ...rows].join("\n"), "text/csv");
+  },
+  import(){
+    const i = document.createElement("input"); i.type="file"; i.accept=".json,application/json";
+    i.onchange = () => { const r = new FileReader();
+      r.onload = () => { try { const data = JSON.parse(r.result);
+          if (typeof data!=="object" || !data.checks) throw new Error("bukan file cadangan");
+          if (!confirm("Ganti semua data di HP ini dengan isi file?")) return;
+          S = Object.assign(fresh(), data); save(); render();
+        } catch(err){ alert("Gagal impor: " + err.message); } };
+      r.readAsText(i.files[0]); };
+    i.click();
+  },
+  reset(){
+    if (!confirm("Hapus SEMUA centang dan catatan? Ekspor cadangan dulu kalau ragu.")) return;
+    if (!confirm("Yakin? Tidak bisa dibatalkan.")) return;
+    S = fresh(); save(); render();
+  },
+  addday(){
+    const date = document.getElementById("newDay").value || today();
+    const day = {id:uid(), date, angin:"", lokasi:"", catatan:""};
+    S.days.push(day);
+    S.days.sort((a,b)=>a.date.localeCompare(b.date));
+    S.open["d"+day.id] = true;
+    save(); render();
+  },
+};
+
+render();
+
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+</script>
+</body>
+</html>
