@@ -1,6 +1,6 @@
 // Cache sederhana supaya aplikasi bisa dibuka tanpa internet.
 // Naikkan VERSION setiap index.html diubah supaya HP mengambil versi baru.
-const VERSION = "v3";
+const VERSION = "v4";
 const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
 self.addEventListener("install", e => e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener("activate", e => e.waitUntil(
