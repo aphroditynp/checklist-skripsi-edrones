@@ -64,3 +64,17 @@ Setiap poin bisa:
   ditutup di GitHub otomatis mencentang poinnya.
 
 Ringkasan menampilkan masukan yang belum selesai dan jadwal bimbingan berikutnya.
+
+## Tab Kalender & Kalender iPhone
+
+Tab Kalender menampilkan kalender bulanan berisi jadwal (`S.jadwal`), hari terbang, tanggal terbang,
+bimbingan, dan tanggal sidang. Jadwal awal sama dengan `jadwal-skripsi.ics` (10 Nov 2026) dan memakai
+UID file itu sebagai ID, jadi tidak dobel antar perangkat maupun saat file .ics yang sama diimpor.
+Jadwal bisa ditambah per tanggal, dicentang selesai, dihapus, atau diimpor dari file `.ics`
+(awalan "Menulis:", "Tenggat:", "Terbang:", "Sidang:" jadi jenis).
+
+Saat sinkron, aplikasi juga menulis `jadwal-skripsi.ics` ke gist yang sama. URL raw-nya
+(`https://gist.githubusercontent.com/<user>/<gist-id>/raw/jadwal-skripsi.ics`) bisa dilanggan di
+Kalender iPhone (tombol "Langganan di Kalender" → `webcal://`) atau Google Calendar (Dari URL).
+Pengingat: 07.00 di hari itu, tenggat 20.00 sehari sebelumnya. URL gist rahasia, tapi siapa pun yang
+memegang URL-nya bisa membaca jadwal.

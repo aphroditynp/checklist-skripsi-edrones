@@ -128,7 +128,7 @@ ol.steps li{margin:3px 0}
 "use strict";
 /* ================= DATA ================= */
 // Naikkan bersama VERSION di sw.js setiap ada perubahan.
-const APP_VERSION = "v6";
+const APP_VERSION = "v7";
 const KEY = "edrones-checklist-v1";
 const FC_REPO = "SKRIPSI-FIXEDWING/flightcontroller-Edrones";
 const REPO_URL = "https://github.com/" + FC_REPO;
@@ -142,15 +142,19 @@ const DEFAULT_DIR = "~/flightcontroller-Edrones";
 // Daftar sidang paling lambat 7 Des supaya sidang selesai akhir Desember
 // (daftar setelah 4 Des masih bisa, tapi sidang bisa mundur ke awal Januari).
 const EV_TYPES = {terbang:"Terbang", tulis:"Menulis", tenggat:"Tenggat", bimbingan:"Bimbingan", sidang:"Sidang", lain:"Lainnya"};
+// Jadwal awal (sama dengan jadwal-skripsi.ics). ID tetap = UID di file .ics, supaya tidak dobel
+// di HP & laptop dan saat file .ics yang sama diimpor. Disimpan di S.jadwal (bisa diedit, ikut sinkron).
 const PLAN = [
-  {date:"2026-11-10", title:"Menulis skripsi", type:"tulis"},
-  {date:"2026-11-11", title:"Menulis skripsi", type:"tulis"},
-  {date:"2026-11-12", title:"Menulis skripsi + siapkan baterai, parameter, misi", type:"tulis"},
-  {date:"2026-11-13", title:"Hari terbang (Jumat)", type:"terbang"},
-  {date:"2026-12-04", title:"Batas ideal daftar sidang (setelah ini sidang bisa mundur ke awal Januari)", type:"tenggat"},
-  {date:"2026-12-07", title:"BATAS DAFTAR SIDANG (target sidang selesai akhir Desember)", type:"tenggat"},
-  {date:"2026-12-31", title:"Target: sidang skripsi selesai", type:"sidang"},
+  {id:"skripsi-2026-11-10-0", date:"2026-11-10", title:"Menulis skripsi", type:"tulis"},
+  {id:"skripsi-2026-11-11-1", date:"2026-11-11", title:"Menulis skripsi", type:"tulis"},
+  {id:"skripsi-2026-11-12-2", date:"2026-11-12", title:"Menulis skripsi + siapkan baterai, parameter, misi", type:"tulis"},
+  {id:"skripsi-2026-11-13-3", date:"2026-11-13", title:"Hari terbang (Jumat)", type:"terbang"},
+  {id:"skripsi-2026-12-04-4", date:"2026-12-04", title:"Batas ideal daftar sidang (setelah ini sidang bisa mundur ke awal Januari)", type:"tenggat"},
+  {id:"skripsi-2026-12-07-5", date:"2026-12-07", title:"BATAS DAFTAR SIDANG (target sidang selesai akhir Desember)", type:"tenggat"},
+  {id:"skripsi-2026-12-31-6", date:"2026-12-31", title:"Target: sidang skripsi selesai", type:"sidang"},
 ];
+const EV_EMOJI = {terbang:"✈️", tulis:"📝", tenggat:"⚠️", bimbingan:"👩‍🏫", sidang:"🎓", lain:"📌"};
+const ICS_FILE = "jadwal-skripsi.ics";
 
 const TABS = [
   {id:"ringkasan", t:"Ringkasan"},
@@ -368,7 +372,7 @@ const LOG_FIELDS = [
 const STATUS = {belum:"Belum", selesai:"Selesai", ulang:"Perlu diulang", batal:"Batal"};
 
 /* ================= STATE ================= */
-function fresh(){ return {checks:{}, flights:{}, days:[], custom:{}, bimbingan:[], agenda:[], sidang:"", tab:"ringkasan", open:{}, projectDir:DEFAULT_DIR, ts:{}}; }
+function fresh(){ return {checks:{}, flights:{}, days:[], custom:{}, bimbingan:[], agenda:[], jadwal:PLAN.map(x=>({...x, done:false})), sidang:"", tab:"ringkasan", open:{}, projectDir:DEFAULT_DIR, ts:{}}; }
 let S;
 try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = fresh(); }
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); updateHeader(); Sync.schedule(); }
@@ -385,6 +389,7 @@ function getV(st, k){
     case "cu": return st.custom[a];
     case "b":  return (st.bimbingan||[]).find(x=>x.id===a);
     case "ag": return (st.agenda||[]).find(x=>x.id===a);
+    case "j":  return (st.jadwal||[]).find(x=>x.id===a);
     default:   return st[t];   // sidang, projectDir
   }
 }
@@ -402,6 +407,8 @@ function setV(st, k, v){
     case "b": { const arr = (st.bimbingan ||= []); const i = arr.findIndex(x=>x.id===a); const c = v && JSON.parse(JSON.stringify(v));
       if (i<0) arr.push(c); else arr[i] = c;
       arr.sort((x,y)=>(x.tanggal||"").localeCompare(y.tanggal||"")); break; }
+    case "j": { const arr = (st.jadwal ||= []); const i = arr.findIndex(x=>x.id===a); const c = v && {...v};
+      if (i<0) arr.push(c); else arr[i] = c; break; }
     case "ag": { const arr = (st.agenda ||= []); const i = arr.findIndex(x=>x.id===a); const c = v && {...v};
       if (i<0) arr.push(c); else arr[i] = c; break; }
     default:   st[t] = v;
@@ -418,6 +425,7 @@ function allKeys(st){
   Object.keys(st.custom).forEach(g=>ks.push(K("cu",g)));
   (st.bimbingan||[]).forEach(b=>ks.push(K("b",b.id)));
   (st.agenda||[]).forEach(a=>ks.push(K("ag",a.id)));
+  (st.jadwal||[]).forEach(j=>ks.push(K("j",j.id)));
   if (st.sidang) ks.push("sidang");
   ks.push("projectDir");
   return ks;
@@ -431,7 +439,7 @@ function mergeInto(local, remote){
   });
   return changed;
 }
-const SYNC_FIELDS = ["checks","flights","days","custom","bimbingan","agenda","sidang","projectDir","ts"];
+const SYNC_FIELDS = ["checks","flights","days","custom","bimbingan","agenda","jadwal","sidang","projectDir","ts"];
 const syncable = st => Object.fromEntries(SYNC_FIELDS.map(f=>[f, st[f]]));
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -525,8 +533,58 @@ function progHtml(label, [d,t]){
 function nextFlight(){ return FLIGHTS.find(f => !["selesai","batal"].includes(flOf(f.code).status)); }
 
 // Semua kejadian di kalender: rencana tetap + data yang sudah ada di aplikasi + agenda sendiri.
+const liveJadwal = () => (S.jadwal||[]).filter(j=>!j.deleted).sort((a,b)=>a.date.localeCompare(b.date));
+const jadOf = id => (S.jadwal||[]).find(j=>j.id===id);
+
+/* ---------- File .ics: impor & feed langganan ---------- */
+function icsUnesc(v){ return v.replace(/\\n/gi,"\n").replace(/\\([,;\\])/g,"$1"); }
+function icsEsc(v){ return String(v).replace(/\\/g,"\\\\").replace(/([,;])/g,"\\$1").replace(/\n/g,"\\n"); }
+const PREFIX_TYPE = {menulis:"tulis", tulis:"tulis", terbang:"terbang", tenggat:"tenggat", deadline:"tenggat",
+  bimbingan:"bimbingan", sidang:"sidang", target:"sidang", lainnya:"lain"};
+function parseIcs(text){
+  const lines = text.replace(/\r?\n[ \t]/g, "").split(/\r?\n/);   // gabung baris lipatan
+  const out = []; let ev = null;
+  for (const ln of lines){
+    if (ln === "BEGIN:VEVENT") ev = {};
+    else if (ln === "END:VEVENT"){ if (ev?.date && ev.summary) out.push(ev); ev = null; }
+    else if (ev){
+      const i = ln.indexOf(":"); if (i < 0) continue;
+      const key = ln.slice(0, i).split(";")[0].toUpperCase(), val = ln.slice(i+1);
+      if (key === "UID") ev.uid = val.trim();
+      else if (key === "SUMMARY") ev.summary = icsUnesc(val).trim();
+      else if (key === "DTSTART"){ const m = val.match(/^(\d{4})(\d{2})(\d{2})/); if (m) ev.date = `${m[1]}-${m[2]}-${m[3]}`; }
+    }
+  }
+  return out.map(e => {
+    const m = e.summary.match(/^([A-Za-z ]{2,20}):\s*(.+)$/);
+    const type = m && PREFIX_TYPE[m[1].trim().toLowerCase()];
+    return {id: (e.uid ? e.uid.split("@")[0] : uid()).replace(/[^\w.-]/g, "_"), date: e.date,
+      type: type || "lain", title: type ? m[2] : e.summary, done:false};
+  });
+}
+// Feed untuk Kalender iPhone: semua yang tampil di tab Kalender. Isi deterministik (tanpa jam sekarang)
+// supaya gist tidak ditulis ulang kalau tidak ada perubahan.
+function buildIcs(){
+  const d8 = d => d.replace(/-/g, "");
+  const next = d => { const t = new Date(d+"T00:00:00Z"); t.setUTCDate(t.getUTCDate()+1); return t.toISOString().slice(0,10).replace(/-/g,""); };
+  const hash = str => { let h = 0; for (const c of str) h = (h*31 + c.codePointAt(0)) >>> 0; return h.toString(36); };
+  const L = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Checklist Skripsi Edrones//ID","CALSCALE:GREGORIAN",
+    "X-WR-CALNAME:Skripsi (aplikasi)","X-WR-TIMEZONE:Asia/Jakarta","REFRESH-INTERVAL;VALUE=DURATION:PT1H","X-PUBLISHED-TTL:PT1H"];
+  allEvents().forEach(e => {
+    const id = e.jid || e.id || `${e.type}-${e.date}-${hash(e.title)}`;
+    const title = `${EV_EMOJI[e.type]||"📌"} ${e.done ? "✅ " : ""}${e.title}`;
+    L.push("BEGIN:VEVENT", `UID:${id}@checklist-skripsi-edrones`, "DTSTAMP:20261110T000000Z",
+      `DTSTART;VALUE=DATE:${d8(e.date)}`, `DTEND;VALUE=DATE:${next(e.date)}`, `SUMMARY:${icsEsc(title)}`,
+      // pengingat: tenggat jam 20.00 sehari sebelumnya, lainnya jam 07.00 di hari itu
+      "BEGIN:VALARM","ACTION:DISPLAY",`DESCRIPTION:${icsEsc(title)}`, e.type==="tenggat" ? "TRIGGER:-PT4H" : "TRIGGER:PT7H","END:VALARM",
+      "END:VEVENT");
+  });
+  L.push("END:VCALENDAR");
+  return L.join("\r\n") + "\r\n";
+}
+
 function allEvents(){
-  const ev = PLAN.map(e=>({...e}));
+  const ev = liveJadwal().map(j=>({...j, jid:j.id}));
   liveDays().forEach(d=>ev.push({date:d.date, title:"Hari terbang" + (d.lokasi ? " · "+d.lokasi : ""), type:"terbang", tab:"hari"}));
   FLIGHTS.forEach(f=>{ const t = flOf(f.code).log.tanggal; if (t) ev.push({date:t, title:`Terbang ${f.code} (${STATUS[flOf(f.code).status]})`, type:"terbang", tab:"terbang"}); });
   liveBim().forEach(b=>{
@@ -551,6 +609,16 @@ const VIEWS = {
       <div class="row" style="align-items:center"><input type="date" data-sidang value="${esc(S.sidang)}" style="max-width:180px">
       <span class="big">${dd===null ? "–" : dd>0 ? "H-"+dd : dd===0 ? "Hari ini!" : "Selesai"}</span></div>
       ${dd===null ? `<div class="muted">Isi tanggal sidang (perkiraan juga boleh) untuk hitung mundur.</div>` : ""}</div>`;
+    {
+      const up = allEvents().filter(e=>!e.done && daysTo(e.date)>=0).slice(0,4);
+      h += `<div class="card"><div class="row"><h2>Jadwal terdekat</h2><span class="spacer"></span>
+        <button class="btn ghost small" data-tab="kalender">Kalender</button></div>` +
+        (up.length ? up.map(e => { const dd = daysTo(e.date);
+          return `<div class="item"><span>${EV_EMOJI[e.type]||"📌"}</span><span style="flex:1">${esc(e.title)}
+            <div class="muted">${esc(fmtTgl(e.date))}</div></span>
+            <span class="tag ${dd<=3?"st-ulang":""}">${dd===0?"hari ini":"H-"+dd}</span></div>`; }).join("")
+          : `<div class="muted">Tidak ada jadwal mendatang.</div>`) + `</div>`;
+    }
     h += `<div class="card"><h2>Progres</h2>` +
       progHtml("Persiapan", p.persiapan) + progHtml("Terbang (data)", p.terbang) +
       progHtml("Analisis", p.analisis) + progHtml("Skripsi", p.skripsi) + progHtml("Masukan bimbingan", p.bimbingan) + progHtml("Sidang", p.sidang) + `</div>`;
@@ -637,16 +705,31 @@ const VIEWS = {
     h += `</div><div class="legend">${Object.entries(EV_TYPES).map(([k,v])=>`<span><i class="ev-${k}"></i>${v}</span>`).join("")}</div></div>`;
     const dl = evs.filter(e=>e.date===sel);
     h += `<div class="card"><h2>${esc(fmtTgl(sel))}</h2>` +
-      (dl.length ? dl.map(e=>`<div class="item"><i class="ev-${e.type}" style="width:10px;height:10px;border-radius:50%;margin-top:6px;flex:0 0 10px"></i>
-        <label style="cursor:default"><b>${EV_TYPES[e.type]}</b> · ${esc(e.title)}${e.tab ? ` <a href="#" class="tag" data-gotab="${e.tab}">buka</a>` : ""}</label>
-        ${e.id ? `<button class="del" data-delag="${e.id}" title="Hapus">×</button>` : ""}</div>`).join("")
+      (dl.length ? dl.map(e=>`<div class="item ${e.done?"done":""}">${e.jid ? `<input type="checkbox" id="jd-${esc(e.jid)}" data-jdone="${esc(e.jid)}" ${e.done?"checked":""}>` : ""}<i class="ev-${e.type}" style="width:10px;height:10px;border-radius:50%;margin-top:6px;flex:0 0 10px"></i>
+        <label ${e.jid ? `for="jd-${esc(e.jid)}"` : 'style="cursor:default"'}><b>${EV_TYPES[e.type]}</b> · ${esc(e.title)}${e.tab ? ` <a href="#" class="tag" data-gotab="${e.tab}">buka</a>` : ""}</label>
+        ${e.jid ? `<button class="del" data-deljad="${esc(e.jid)}" title="Hapus">×</button>` : e.id ? `<button class="del" data-delag="${e.id}" title="Hapus">×</button>` : ""}</div>`).join("")
         : `<div class="muted">Tidak ada agenda.</div>`) +
       `<div class="add"><select id="agType" style="flex:0 0 120px">${Object.entries(EV_TYPES).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select>
-        <input type="text" id="agTitle" placeholder="Tambah agenda di tanggal ini…">
+        <input type="text" id="agTitle" placeholder="Agenda baru…">
         <button class="btn small" data-act="addag">Tambah</button></div></div>`;
-    const up = evs.filter(e=>e.date>=today() && ["tenggat","sidang","terbang"].includes(e.type)).slice(0,6);
+    const up = evs.filter(e=>!e.done && e.date>=today() && ["tenggat","sidang","terbang"].includes(e.type)).slice(0,6);
     h += `<div class="card"><h2>Tenggat & terbang terdekat</h2>` + (up.length ? up.map(e=>`<div class="item"><i class="ev-${e.type}" style="width:10px;height:10px;border-radius:50%;margin-top:6px;flex:0 0 10px"></i>
       <label style="cursor:default">${esc(fmtTgl(e.date))} <span class="muted">(H-${daysTo(e.date)})</span><br>${esc(e.title)}</label></div>`).join("") : `<div class="muted">Tidak ada.</div>`) + `</div>`;
+    {
+      const url = Sync.icsUrl();
+      h += `<div class="card"><h2>Sambungkan ke Kalender iPhone</h2>`;
+      if (!Sync.on()) h += `<div class="note warn">Hubungkan sinkron server dulu (tab Ringkasan). Kalender iPhone membaca jadwal dari gist yang sama.</div>`;
+      else if (!url) h += `<div class="note info">Tunggu sinkron pertama selesai, lalu buka tab ini lagi.</div>`;
+      else h += `<div class="muted">Semua yang tampil di kalender ini diterbitkan sebagai kalender langganan
+          "Skripsi (aplikasi)". Perubahan di aplikasi muncul di Kalender iPhone dalam ±1 jam, lengkap dengan pengingat.</div>
+        <div class="row" style="margin:8px 0"><a class="btn" href="${esc(url.replace(/^https:/,"webcal:"))}">Langganan di Kalender</a>
+          <button class="btn ghost small" data-copy="${esc(url)}">Salin URL</button></div>
+        <pre class="cmd">${esc(url)}</pre>
+        <div class="muted">Kalau tombol tidak membuka Kalender: Pengaturan → Kalender → Akun → Tambah Akun → Lainnya →
+          Tambahkan Kalender Langganan, lalu tempel URL. Matikan "Hapus Peringatan" supaya pengingat ikut muncul.
+          Google Calendar juga bisa: Setelan → Tambahkan kalender → Dari URL. URL ini rahasia; siapa pun yang punya URL-nya bisa melihat jadwal.</div>`;
+      h += `<div class="row" style="margin-top:8px"><button class="btn ghost" data-act="importics">Impor file .ics ke aplikasi</button></div></div>`;
+    }
     h += `<div class="card"><h2>Ekspor ke Google Calendar</h2><div class="muted">Unduh file .ics lalu impor di Google Calendar
       (Setelan → Impor & ekspor). Jadwal terbang, tenggat, dan agenda ikut terbawa.</div>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="ics">Unduh .ics</button></div></div>`;
@@ -782,7 +865,7 @@ function render(){
 
 /* ================= EVENTS ================= */
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-tab],[data-add],[data-delcustom],[data-act],[data-delday],[data-goflight],[data-copy],[data-gotab],[data-gobim],[data-addpoin],[data-delpoin],[data-parsepoin],[data-delbim],[data-issue],[data-issueurl],[data-calnav],[data-calday],[data-delag]");
+  const b = e.target.closest("[data-tab],[data-add],[data-delcustom],[data-act],[data-delday],[data-goflight],[data-copy],[data-gotab],[data-gobim],[data-addpoin],[data-delpoin],[data-parsepoin],[data-delbim],[data-issue],[data-issueurl],[data-calnav],[data-calday],[data-delag],[data-deljad]");
   if (!b) return;
   const d = b.dataset;
   if (d.tab){ S.tab = d.tab; save(); render(); window.scrollTo(0,0); }
@@ -825,6 +908,8 @@ document.addEventListener("click", e => {
     if (n===0){ S.calMonth = today().slice(0,7); S.calSel = today(); } else { m += n; if (m<1){ m=12; y--; } if (m>12){ m=1; y++; } S.calMonth = `${y}-${String(m).padStart(2,"0")}`; }
     save(); render(); }
   else if (d.calday){ S.calSel = d.calday; save(); render(); }
+  else if (d.deljad){ const j = jadOf(d.deljad); if (!confirm(`Hapus jadwal "${j.title}"?`)) return;
+    j.deleted = true; touch("j", j.id); save(); render(); }
   else if (d.delag){ if (!confirm("Hapus agenda ini?")) return;
     const a = (S.agenda||[]).find(x=>x.id===d.delag); if (a){ a.deleted = true; touch("ag", a.id); } save(); render(); }
   else if (d.act) ACTIONS[d.act]();
@@ -833,6 +918,7 @@ document.addEventListener("change", e => {
   const t = e.target, d = t.dataset;
   if (d.check){ S.checks[d.check] = t.checked; touch("c", d.check);
     t.closest(".item")?.classList.toggle("done", t.checked); save(); }
+  else if (d.jdone){ const j = jadOf(d.jdone); j.done = t.checked; touch("j", j.id); save(); render(); }
   else if (d.totask && t.value){
     const [bid,pid] = d.totask.split("|"), [tab,gid] = t.value.split("|");
     const bm = bimOf(bid), x = bm.poin.find(y=>y.id===pid);
@@ -963,8 +1049,24 @@ const ACTIONS = {
   },
   addag(){
     const title = document.getElementById("agTitle").value.trim(); if (!title) return;
-    const a = {id:uid(), date:S.calSel || today(), title, type:document.getElementById("agType").value};
-    (S.agenda ||= []).push(a); touch("ag", a.id); save(); render();
+    const j = {id:uid(), date:S.calSel || today(), title, type:document.getElementById("agType").value, done:false};
+    (S.jadwal ||= []).push(j); touch("j", j.id); save(); render();
+  },
+  importics(){
+    const i = document.createElement("input"); i.type = "file"; i.accept = ".ics,text/calendar";
+    i.onchange = () => { const r = new FileReader();
+      r.onload = () => {
+        const evs = parseIcs(String(r.result));
+        if (!evs.length){ alert("Tidak ada acara yang terbaca di file ini."); return; }
+        let baru = 0, ubah = 0;
+        evs.forEach(e => { const old = jadOf(e.id);
+          if (old){ Object.assign(old, {date:e.date, type:e.type, title:e.title, deleted:false}); ubah++; }
+          else { (S.jadwal ||= []).push(e); baru++; }
+          touch("j", e.id); });
+        save(); render(); alert(`Impor selesai: ${baru} jadwal baru, ${ubah} diperbarui.`);
+      };
+      r.readAsText(i.files[0]); };
+    i.click();
   },
   ics(){
     const pad = n => String(n).padStart(2,"0");
@@ -1030,13 +1132,18 @@ const Sync = (() => {
   }
   async function readRemote(){
     const g = await api("/gists/" + cfg.gistId);
+    if (g.owner?.login && cfg.owner !== g.owner.login){ cfg.owner = g.owner.login; saveCfg(); }
+    const ics = g.files[ICS_FILE];
+    remoteIcs = ics ? (ics.truncated ? await (await fetch(ics.raw_url)).text() : ics.content) : null;
     const f = g.files[GIST_FILE];
     if (!f) throw new Error(`file ${GIST_FILE} tidak ada di gist ini`);
     const txt = f.truncated ? await (await fetch(f.raw_url)).text() : f.content;
     return JSON.parse(txt).data;
   }
+  let remoteIcs = null;
   const files = () => ({[GIST_FILE]: {content: JSON.stringify(
-    {app:"checklist-skripsi-edrones", disimpan:new Date().toISOString(), data:syncable(S)})}});
+    {app:"checklist-skripsi-edrones", disimpan:new Date().toISOString(), data:syncable(S)})},
+    [ICS_FILE]: {content: buildIcs()}});
   async function run(){
     if (!cfg.token) return;
     if (busy){ again = true; return; }
@@ -1046,12 +1153,13 @@ const Sync = (() => {
       if (!cfg.gistId){
         const g = await api("/gists", {method:"POST", body: JSON.stringify(
           {description:"Data Checklist Skripsi Edrones (jangan dihapus)", public:false, files: files()})});
-        cfg.gistId = g.id; saveCfg();
+        cfg.gistId = g.id; cfg.owner = g.owner?.login; saveCfg();
       } else {
         const remote = await readRemote();
         const rts = remote.ts || {};
-        const needPush = Object.entries(S.ts).some(([k,t]) => t > (rts[k] || 0));
+        let needPush = Object.entries(S.ts).some(([k,t]) => t > (rts[k] || 0));
         if (mergeInto(S, remote)){ localStorage.setItem(KEY, JSON.stringify(S)); safeRender(); }
+        if (remoteIcs !== buildIcs()) needPush = true;   // feed kalender belum ada / belum sama
         if (needPush) await api("/gists/" + cfg.gistId, {method:"PATCH", body: JSON.stringify({files: files()})});
       }
       cfg.last = Date.now(); saveCfg();
@@ -1065,7 +1173,8 @@ const Sync = (() => {
     }
   }
   return {
-    api, on: () => !!cfg.token, gistId: () => cfg.gistId || "", status: () => status, badge,
+    api, on: () => !!cfg.token,
+    icsUrl: () => cfg.owner && cfg.gistId ? `https://gist.githubusercontent.com/${cfg.owner}/${cfg.gistId}/raw/${ICS_FILE}` : "", gistId: () => cfg.gistId || "", status: () => status, badge,
     schedule(){ if (!cfg.token) return; clearTimeout(timer); timer = setTimeout(run, 2500);
       if (!busy) setStatus("Ada perubahan, menunggu sinkron…"); },
     now: run,
