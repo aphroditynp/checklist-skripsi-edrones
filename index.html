@@ -128,7 +128,7 @@ ol.steps li{margin:3px 0}
 "use strict";
 /* ================= DATA ================= */
 // Naikkan bersama VERSION di sw.js setiap ada perubahan.
-const APP_VERSION = "v11";
+const APP_VERSION = "v12";
 const KEY = "edrones-checklist-v1";
 const FC_REPO = "SKRIPSI-FIXEDWING/flightcontroller-Edrones";
 const REPO_URL = "https://github.com/" + FC_REPO;
@@ -660,7 +660,13 @@ const VIEWS = {
         <div class="row"><input type="text" readonly value="${esc(gid || "(dicari / dibuat saat sinkron pertama)")}" style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:13px">
           ${gid ? `<button class="btn ghost small" data-copy="${esc(gid)}">Salin</button>` : ""}</div>
         ${gid ? `<div class="muted" style="margin-top:4px">Akun: <b>${esc(Sync.owner() || "?")}</b>${Sync.lastSync() ? ` · sinkron terakhir ${esc(fmt(Sync.lastSync()))}` : ""}</div>` : ""}
-        <div class="note info" style="margin-top:8px"><b>Tambah perangkat:</b> buka aplikasi di perangkat baru, tempel <b>token yang sama</b>,
+        <label class="muted" style="display:block;margin-top:8px">Token GitHub (tersimpan di perangkat ini)</label>
+        <div class="row"><input type="text" readonly id="tokView" value="${esc(showTok ? Sync.token() : Sync.token().slice(0,4) + "••••••••••••" + Sync.token().slice(-4))}"
+            style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:13px">
+          <button class="btn ghost small" data-act="toggletok">${showTok ? "Sembunyikan" : "Tampilkan"}</button>
+          <button class="btn ghost small" data-copy="${esc(Sync.token())}">Salin</button></div>
+        <div class="muted" style="margin-top:4px">Token ini kunci akses akun GitHub-mu: tempel hanya di aplikasi ini, jangan dikirim ke orang lain.</div>
+        <div class="note info" style="margin-top:8px"><b>Tambah perangkat:</b> buka aplikasi di perangkat baru, tempel <b>token yang sama</b> (salin dari atas),
           biarkan Gist ID kosong. Aplikasi otomatis memakai gist terbaru di akunmu (yang ini).</div>
         <div class="row" style="margin-top:8px">
           <button class="btn" data-act="syncnow">${failed ? "Coba lagi" : "Sinkron sekarang"}</button>
@@ -1116,6 +1122,7 @@ const ACTIONS = {
     await Sync.connect(token, gist); render();
   },
   async syncnow(){ await Sync.now(); render(); },
+  toggletok(){ showTok = !showTok; render(); },
   async findgists(){
     try { await Sync.findGists(); } catch(e){ alert("Gagal memuat daftar gist: " + e.message); }
     render();
@@ -1136,6 +1143,7 @@ const ACTIONS = {
 
 /* ================= SINKRON GITHUB GIST ================= */
 // Token dan ID gist disimpan terpisah dari data (tidak ikut file ekspor, tidak ikut ke gist).
+let showTok = false;   // hanya tampilan, tidak disimpan
 const SYNC_KEY = "edrones-sync-v1";
 const GIST_FILE = "checklist-skripsi.json";
 const Sync = (() => {
@@ -1235,7 +1243,7 @@ const Sync = (() => {
     now: run,
     connect(token, gistId){ cfg = {token, gistId}; candidates = null; saveCfg(); return run(); },
     disconnect(){ clearTimeout(timer); cfg = {}; candidates = null; saveCfg(); setStatus("Belum diatur"); },
-    lastSync: () => cfg.last || 0, owner: () => cfg.owner || "",
+    token: () => cfg.token || "", lastSync: () => cfg.last || 0, owner: () => cfg.owner || "",
     candidates: () => candidates,
     findGists,
     useGist(id){ const c = (candidates||[]).find(x=>x.id===id); cfg.gistId = id; cfg.owner = c?.owner || cfg.owner; saveCfg(); return run(); },

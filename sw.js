@@ -1,6 +1,6 @@
 // Cache supaya aplikasi bisa dibuka tanpa internet.
 // Naikkan VERSION (dan APP_VERSION di index.html) setiap ada perubahan.
-const VERSION = "v11";
+const VERSION = "v12";
 const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
 self.addEventListener("install", e => e.waitUntil(
   caches.open(VERSION).then(c => c.addAll(FILES.map(f => new Request(f, {cache: "reload"})))).then(() => self.skipWaiting())));
