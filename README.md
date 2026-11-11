@@ -82,3 +82,20 @@ Saat sinkron, aplikasi juga menulis `jadwal-skripsi.ics` ke gist yang sama. URL 
 Kalender iPhone (tombol "Langganan di Kalender" → `webcal://`) atau Google Calendar (Dari URL).
 Pengingat: 07.00 di hari itu, tenggat 20.00 sehari sebelumnya. URL gist rahasia, tapi siapa pun yang
 memegang URL-nya bisa membaca jadwal.
+
+## Bimbingan → kalender
+
+Di catatan bimbingan, baris diawali `-` jadi poin masukan; tanggal di baris itu ("maks 20 Nov", "25/11",
+"3 desember 2026") otomatis jadi **tenggat** poin dan muncul di tab Kalender. Tenggat bisa diubah per poin.
+"Bimbingan berikutnya" punya tanggal, jam, dan tempat. Pilihan tujuan tugas termasuk **Terbang · Pelaksanaan misi**
+(grup checklist di atas tab Terbang).
+
+## Kalender & Reminders iPhone (dari Mac)
+
+Aplikasi web tidak bisa menulis ke Kalender iPhone. Dari Mac:
+
+    GH_TOKEN=$(gh auth token) python3 tools/kalender_mac.py [--dry-run]
+
+menyalin jadwal, tenggat poin masukan, dan bimbingan berikutnya ke kalender & list Reminders "Skripsi" (iCloud).
+Item buatan skrip diberi penanda `ckid:<kunci>` di catatan, jadi aman dijalankan berulang: hanya yang berubah
+yang diubah, yang dihapus di aplikasi ikut dihapus, acara buatan sendiri tidak disentuh.
