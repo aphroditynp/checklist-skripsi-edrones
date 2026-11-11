@@ -128,13 +128,13 @@ ol.steps li{margin:3px 0}
 "use strict";
 /* ================= DATA ================= */
 // Naikkan bersama VERSION di sw.js setiap ada perubahan.
-const APP_VERSION = "v12";
+const APP_VERSION = "v13";
 const KEY = "edrones-checklist-v1";
 const FC_REPO = "SKRIPSI-FIXEDWING/flightcontroller-Edrones";
 const REPO_URL = "https://github.com/" + FC_REPO;
 const DOSEN = ["Pembimbing 1", "Pembimbing 2", "Penguji", "Lainnya"];
 // Grup tujuan saat poin masukan dijadikan tugas: [tab, id grup]
-const TARGETS = [["skripsi","bab123"],["skripsi","bab4"],["skripsi","bab5"],["skripsi","bimbingan"],
+const TARGETS = [["terbang","pelaksanaan"],["skripsi","bab123"],["skripsi","bab4"],["skripsi","bab5"],["skripsi","bimbingan"],
   ["analisis","rekap"],["persiapan","misi"],["sidang","daftar"],["sidang","slide"],["sidang","latihan"],["sidang","pasca"]];
 const DEFAULT_DIR = "~/flightcontroller-Edrones";
 
@@ -272,6 +272,10 @@ const GROUPS = {
       "ACC pembimbing 1.",
       "ACC pembimbing 2.",
     ], editable:true},
+  ],
+  terbang: [
+    {id:"pelaksanaan", title:"Pelaksanaan misi", info:"Hal tambahan yang harus dilakukan saat terbang, misalnya dari masukan dosen. Cek sebelum dan saat di lapangan.",
+      items:[], editable:true},
   ],
   sidang: [
     {id:"daftar", title:"Pendaftaran & berkas", items:[
@@ -455,6 +459,20 @@ const groupOf = (tab, gid) => GROUPS[tab].find(g=>g.id===gid);
 const tabTitle = id => TABS.find(t=>t.id===id).t;
 const fmtTgl = d => d ? new Date(d+"T00:00:00").toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"}) : "";
 // Poin yang sudah jadi tugas memakai centang tugas itu, jadi status selalu sama di kedua tempat.
+// Cari tanggal di teks bebas: "20 Nov", "20 november 2026", "20/11", "20-11-2026". Tahun mengikuti tanggal acuan.
+const BULAN = {jan:1,feb:2,mar:3,apr:4,mei:5,may:5,jun:6,jul:7,agu:8,agt:8,ags:8,aug:8,sep:9,okt:10,oct:10,nov:11,des:12,dec:12};
+function parseTglID(text, ref){
+  const r0 = new Date((ref || today()) + "T00:00:00");
+  let d, m, y;
+  let k = String(text).toLowerCase().match(/\b(\d{1,2})\s*(jan|feb|mar|apr|mei|may|jun|jul|agu|agt|ags|aug|sep|okt|oct|nov|des|dec)[a-z]*\.?(?:\s+(\d{4}))?/);
+  if (k){ d = +k[1]; m = BULAN[k[2]]; y = k[3] && +k[3]; }
+  else if ((k = String(text).match(/\b(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?\b/))){
+    d = +k[1]; m = +k[2]; y = k[3] && (+k[3] < 100 ? 2000 + +k[3] : +k[3]); }
+  else return "";
+  if (!(d >= 1 && d <= 31 && m >= 1 && m <= 12)) return "";
+  if (!y){ y = r0.getFullYear(); if (m < r0.getMonth() + 1 - 2) y++; }   // "5 Jan" ditulis bulan November → tahun depan
+  return `${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+}
 function linkedTask(p){ return p.target && (S.custom[p.target.gid]||[]).find(c=>c.id===p.target.cid); }
 function poinCheckId(b, p){ const c = linkedTask(p); return c ? `${p.target.gid}:c:${c.id}` : `bim:${b.id}:${p.id}`; }
 const liveDays = () => S.days.filter(d=>!d.deleted);
@@ -575,7 +593,7 @@ function buildIcs(){
   const L = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Checklist Skripsi Edrones//ID","CALSCALE:GREGORIAN",
     "X-WR-CALNAME:Skripsi (aplikasi)","X-WR-TIMEZONE:Asia/Jakarta","REFRESH-INTERVAL;VALUE=DURATION:PT1H","X-PUBLISHED-TTL:PT1H"];
   allEvents().forEach(e => {
-    const id = e.jid || e.id || `${e.type}-${e.date}-${hash(e.title)}`;
+    const id = e.jid || e.uid || e.id || `${e.type}-${e.date}-${hash(e.title)}`;
     const title = `${EV_EMOJI[e.type]||"📌"} ${e.done ? "✅ " : ""}${e.title}`;
     L.push("BEGIN:VEVENT", `UID:${id}@checklist-skripsi-edrones`, "DTSTAMP:20261110T000000Z",
       `DTSTART;VALUE=DATE:${d8(e.date)}`, `DTEND;VALUE=DATE:${next(e.date)}`, `SUMMARY:${icsEsc(title)}`,
@@ -593,7 +611,10 @@ function allEvents(){
   FLIGHTS.forEach(f=>{ const t = flOf(f.code).log.tanggal; if (t) ev.push({date:t, title:`Terbang ${f.code} (${STATUS[flOf(f.code).status]})`, type:"terbang", tab:"terbang"}); });
   liveBim().forEach(b=>{
     if (b.tanggal) ev.push({date:b.tanggal, title:`Bimbingan ${b.dosen}${b.topik ? " · "+b.topik : ""}`, type:"bimbingan", tab:"bimbingan"});
-    if (b.next) ev.push({date:b.next, title:`Bimbingan berikutnya (${b.dosen})`, type:"bimbingan", tab:"bimbingan"});
+    if (b.next) ev.push({date:b.next, uid:"bimnext-"+b.id, type:"bimbingan", tab:"bimbingan",
+      title:`Bimbingan ${b.dosen}${b.nextJam ? " · " + b.nextJam.replace(":", ".") : ""}${b.nextTempat ? " · " + b.nextTempat : ""}`});
+    b.poin.forEach(x => { if (x.due) ev.push({date:x.due, uid:"poin-"+x.id, type:"tenggat", tab:"bimbingan",
+      title:"Masukan: " + x.text, checkId:poinCheckId(b, x), done:!!S.checks[poinCheckId(b, x)]}); });
   });
   if (S.sidang) ev.push({date:S.sidang, title:"SIDANG SKRIPSI", type:"sidang", tab:"sidang"});
   (S.agenda||[]).filter(a=>!a.deleted).forEach(a=>ev.push({...a}));
@@ -732,7 +753,7 @@ const VIEWS = {
     h += `</div><div class="legend">${Object.entries(EV_TYPES).map(([k,v])=>`<span><i class="ev-${k}"></i>${v}</span>`).join("")}</div></div>`;
     const dl = evs.filter(e=>e.date===sel);
     h += `<div class="card"><h2>${esc(fmtTgl(sel))}</h2>` +
-      (dl.length ? dl.map(e=>`<div class="item ${e.done?"done":""}">${e.jid ? `<input type="checkbox" id="jd-${esc(e.jid)}" data-jdone="${esc(e.jid)}" ${e.done?"checked":""}>` : ""}<i class="ev-${e.type}" style="width:10px;height:10px;border-radius:50%;margin-top:6px;flex:0 0 10px"></i>
+      (dl.length ? dl.map(e=>`<div class="item ${e.done?"done":""}">${e.jid ? `<input type="checkbox" id="jd-${esc(e.jid)}" data-jdone="${esc(e.jid)}" ${e.done?"checked":""}>` : e.checkId ? `<input type="checkbox" data-check="${esc(e.checkId)}" ${e.done?"checked":""}>` : ""}<i class="ev-${e.type}" style="width:10px;height:10px;border-radius:50%;margin-top:6px;flex:0 0 10px"></i>
         <label ${e.jid ? `for="jd-${esc(e.jid)}"` : 'style="cursor:default"'}><b>${EV_TYPES[e.type]}</b> · ${esc(e.title)}${e.tab ? ` <a href="#" class="tag" data-gotab="${e.tab}">buka</a>` : ""}</label>
         ${e.jid ? `<button class="del" data-deljad="${esc(e.jid)}" title="Hapus">×</button>` : e.id ? `<button class="del" data-delag="${e.id}" title="Hapus">×</button>` : ""}</div>`).join("")
         : `<div class="muted">Tidak ada agenda.</div>`) +
@@ -783,7 +804,8 @@ const VIEWS = {
     return h;
   },
   terbang(){
-    let h = `<div class="card"><h2>Daftar terbang</h2><div class="muted">Urutan selang-seling F → L supaya angin tidak tercampur ke hasil.
+    let h = GROUPS.terbang.map(g=>groupHtml(g)).join("");
+    h += `<div class="card"><h2>Daftar terbang</h2><div class="muted">Urutan selang-seling F → L supaya angin tidak tercampur ke hasil.
       P1 setelah F dan L berhasil di hari yang sama. R80 hanya angin ≤ 4 m/s.</div></div>`;
     FLIGHTS.forEach(f => {
       const fl = flOf(f.code), st = fl.status, lg = fl.log, steps = flightSteps(f);
@@ -849,10 +871,13 @@ const VIEWS = {
           <div><label>Tanggal</label><input type="date" data-bimfield="${b.id}|tanggal" value="${esc(b.tanggal)}"></div>
           <div><label>Dengan</label><select data-bimfield="${b.id}|dosen">${DOSEN.map(x=>`<option ${x===b.dosen?"selected":""}>${x}</option>`).join("")}</select></div>
           <div class="full"><label>Topik</label><input type="text" data-bimfield="${b.id}|topik" value="${esc(b.topik)}"></div>
-          <div class="full"><label>Catatan (baris diawali "-" bisa diubah jadi poin)</label>
+          <div class="full"><label>Catatan (baris diawali "-" jadi poin; tanggal di baris itu, mis. "kirim Bab 4 maks 20 Nov", jadi tenggat di Kalender)</label>
             <textarea data-bimfield="${b.id}|catatan" rows="5">${esc(b.catatan)}</textarea></div>
           <div class="full"><button class="btn ghost small" data-parsepoin="${b.id}">Ubah baris "-" jadi poin masukan</button></div>
-          <div><label>Bimbingan berikutnya</label><input type="date" data-bimfield="${b.id}|next" value="${esc(b.next)}"></div>
+          <div class="full"><label>Bimbingan berikutnya (masuk Kalender)</label></div>
+          <div><label>Tanggal</label><input type="date" data-bimfield="${b.id}|next" value="${esc(b.next)}"></div>
+          <div><label>Jam</label><input type="time" data-bimfield="${b.id}|nextJam" value="${esc(b.nextJam)}"></div>
+          <div class="full"><label>Tempat</label><input type="text" data-bimfield="${b.id}|nextTempat" value="${esc(b.nextTempat)}" placeholder="mis. Ruangan Mas Andi"></div>
         </div>
         <h3>Poin masukan</h3>
         ${b.poin.length ? "" : `<div class="muted">Belum ada poin.</div>`}
@@ -860,8 +885,11 @@ const VIEWS = {
           const task = linkedTask(x);
           const chips = [];
           if (task) chips.push(`<a href="#" class="tag" data-gotab="${x.target.tab}">→ ${esc(tabTitle(x.target.tab))} · ${esc(groupOf(x.target.tab,x.target.gid).title)}</a>`);
+          if (x.due) chips.push(`<a href="#" class="tag ${daysTo(x.due)<0 && !S.checks[poinCheckId(b,x)] ? "st-batal" : daysTo(x.due)<=3 ? "st-ulang" : ""}" data-gocal="${esc(x.due)}">📅 ${esc(fmtTgl(x.due))}</a>`);
           if (x.issue?.url) chips.push(`<a class="tag" href="${esc(x.issue.url)}" target="_blank" rel="noopener">issue FC #${esc(x.issue.number)}</a>`);
           const acts = [];
+          acts.push(`<label class="muted" style="display:flex;align-items:center;gap:4px">Tenggat
+            <input type="date" data-poindue="${b.id}|${x.id}" value="${esc(x.due)}" style="width:150px"></label>`);
           if (!task) acts.push(`<select data-totask="${b.id}|${x.id}" style="flex:1;min-width:150px">${opts}</select>`);
           if (!x.issue?.url){
             acts.push(`<button class="btn ghost small" data-issue="${b.id}|${x.id}">Jadikan issue FC</button>`);
@@ -892,7 +920,7 @@ function render(){
 
 /* ================= EVENTS ================= */
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-tab],[data-add],[data-delcustom],[data-act],[data-delday],[data-goflight],[data-copy],[data-gotab],[data-gobim],[data-addpoin],[data-delpoin],[data-parsepoin],[data-delbim],[data-issue],[data-issueurl],[data-calnav],[data-calday],[data-delag],[data-deljad],[data-usegist]");
+  const b = e.target.closest("[data-tab],[data-add],[data-delcustom],[data-act],[data-delday],[data-goflight],[data-copy],[data-gotab],[data-gobim],[data-addpoin],[data-delpoin],[data-parsepoin],[data-delbim],[data-issue],[data-issueurl],[data-calnav],[data-calday],[data-delag],[data-deljad],[data-usegist],[data-gocal]");
   if (!b) return;
   const d = b.dataset;
   if (d.tab){ S.tab = d.tab; save(); render(); window.scrollTo(0,0); }
@@ -920,7 +948,7 @@ document.addEventListener("click", e => {
     bm.poin = bm.poin.filter(x=>x.id!==pid); touch("b", bid); save(); render(); }
   else if (d.parsepoin){ const bm = bimOf(d.parsepoin); let n = 0;
     (bm.catatan||"").split("\n").forEach(line => { const m = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.+)$/);
-      if (m && !bm.poin.some(x=>x.text===m[1].trim())){ bm.poin.push({id:uid(), text:m[1].trim()}); n++; } });
+      if (m && !bm.poin.some(x=>x.text===m[1].trim())){ bm.poin.push({id:uid(), text:m[1].trim(), due:parseTglID(m[1], bm.tanggal)}); n++; } });
     if (!n){ alert('Tidak ada baris baru yang diawali "-", "*", "•" atau nomor.'); return; }
     touch("b", bm.id); save(); render(); }
   else if (d.delbim){ if (!confirm("Hapus catatan bimbingan ini? Tugas yang sudah dibuat tetap ada.")) return;
@@ -935,6 +963,7 @@ document.addEventListener("click", e => {
     if (n===0){ S.calMonth = today().slice(0,7); S.calSel = today(); } else { m += n; if (m<1){ m=12; y--; } if (m>12){ m=1; y++; } S.calMonth = `${y}-${String(m).padStart(2,"0")}`; }
     save(); render(); }
   else if (d.calday){ S.calSel = d.calday; save(); render(); }
+  else if (d.gocal){ e.preventDefault(); S.tab = "kalender"; S.calSel = d.gocal; S.calMonth = d.gocal.slice(0,7); save(); render(); window.scrollTo(0,0); }
   else if (d.usegist){
     if (!confirm("Pakai gist ini di perangkat ini? Data perangkat ini akan digabung ke gist tersebut.")) return;
     Sync.useGist(d.usegist).then(render); }
@@ -948,6 +977,8 @@ document.addEventListener("change", e => {
   const t = e.target, d = t.dataset;
   if (d.check){ S.checks[d.check] = t.checked; touch("c", d.check);
     t.closest(".item")?.classList.toggle("done", t.checked); save(); }
+  else if (d.poindue){ const [bid,pid] = d.poindue.split("|"); const x = bimOf(bid).poin.find(y=>y.id===pid);
+    x.due = t.value; touch("b", bid); save(); render(); }
   else if (d.jdone){ const j = jadOf(d.jdone); j.done = t.checked; touch("j", j.id); save(); render(); }
   else if (d.totask && t.value){
     const [bid,pid] = d.totask.split("|"), [tab,gid] = t.value.split("|");
@@ -985,7 +1016,7 @@ document.addEventListener("keydown", e => {
 function addPoin(bid){
   const inp = document.querySelector(`[data-poininput="${CSS.escape(bid)}"]`);
   const text = inp.value.trim(); if (!text) return;
-  bimOf(bid).poin.push({id:uid(), text}); touch("b", bid); save(); render();
+  bimOf(bid).poin.push({id:uid(), text, due:parseTglID(text, bimOf(bid).tanggal)}); touch("b", bid); save(); render();
   document.querySelector(`[data-poininput="${CSS.escape(bid)}"]`)?.focus();
 }
 function issueText(b, x){
