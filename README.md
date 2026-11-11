@@ -28,8 +28,12 @@ Tab Ringkasan → kartu "Sinkron server". Data dikirim ke satu **gist privat**
 Cara pasang:
 1. Buat token klasik di https://github.com/settings/tokens/new?scopes=gist,public_repo dengan izin
    **gist** dan **public_repo** (untuk issue di repo FC); atur kedaluwarsa sampai setelah sidang.
-2. Perangkat pertama: tempel token, Gist ID dikosongkan → gist dibuat otomatis.
-3. Perangkat lain: tempel token yang sama + Gist ID (atau URL gist) dari perangkat pertama.
+2. Tempel token, Gist ID dibiarkan kosong. Aplikasi mencari gist berisi `checklist-skripsi.json` di akun
+   pemilik token dan memakai yang paling baru diubah; kalau belum ada, gist baru dibuat. Jadi perangkat
+   tambahan cukup diberi token yang sama.
+3. Kartu Sinkron menampilkan gist yang dipakai, akun, waktu sinkron terakhir, dan (tombol "Lihat semua gist")
+   daftar semua gist data aplikasi untuk berpindah gist. Gist ID tidak ditemukan (404) → daftar muncul sendiri.
+   Gangguan jaringan / server dicoba ulang otomatis tiap 1 menit.
 
 Cara kerja: tetap offline-first. Setiap perubahan dicatat waktu ubahnya per item
 (`S.ts`). Saat sinkron (2,5 s setelah perubahan, saat aplikasi dibuka, saat internet

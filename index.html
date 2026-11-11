@@ -128,7 +128,7 @@ ol.steps li{margin:3px 0}
 "use strict";
 /* ================= DATA ================= */
 // Naikkan bersama VERSION di sw.js setiap ada perubahan.
-const APP_VERSION = "v10";
+const APP_VERSION = "v11";
 const KEY = "edrones-checklist-v1";
 const FC_REPO = "SKRIPSI-FIXEDWING/flightcontroller-Edrones";
 const REPO_URL = "https://github.com/" + FC_REPO;
@@ -650,27 +650,44 @@ const VIEWS = {
           (open.length>5 ? `<div class="muted">…dan ${open.length-5} lagi</div>` : "")
           : `<div class="muted">Tidak ada masukan yang tertunda.</div>`}</div>`;
     }
-    h += Sync.on() ? `<div class="card"><h2>Sinkron server (GitHub Gist)</h2>
-      <div class="note info" id="syncStatus">${esc(Sync.status())}</div>
-      <div class="muted">Data otomatis dikirim ke gist privat setiap ada perubahan dan diambil saat aplikasi dibuka.
-        Di perangkat lain, isi token dan Gist ID yang sama.</div>
-      <label class="muted" style="display:block;margin-top:8px">Gist ID</label>
-      <div class="row"><input type="text" readonly value="${esc(Sync.gistId() || "(dibuat saat sinkron pertama)")}" style="flex:1">
-        ${Sync.gistId() ? `<button class="btn ghost small" data-copy="${esc(Sync.gistId())}">Salin</button>` : ""}</div>
-      <div class="row" style="margin-top:8px">
-        <button class="btn" data-act="syncnow">Sinkron sekarang</button>
-        ${Sync.gistId() ? `<a class="btn ghost" href="https://gist.github.com/${esc(Sync.gistId())}" target="_blank" rel="noopener">Lihat gist & riwayat</a>` : ""}
-        <button class="btn danger" data-act="syncoff">Putuskan di perangkat ini</button></div></div>`
-    : `<div class="card"><h2>Sinkron server (GitHub Gist)</h2>
+    if (Sync.on()){
+      const gid = Sync.gistId(), list = Sync.candidates();
+      const fmt = iso => new Date(iso).toLocaleString("id-ID", {dateStyle:"medium", timeStyle:"short"});
+      const failed = /^Gagal/.test(Sync.status());
+      h += `<div class="card"><h2>Sinkron server (GitHub Gist)</h2>
+        <div class="note ${failed ? "bad" : "info"}" id="syncStatus">${esc(Sync.status())}</div>
+        <label class="muted" style="display:block;margin-top:4px">Gist yang dipakai perangkat ini</label>
+        <div class="row"><input type="text" readonly value="${esc(gid || "(dicari / dibuat saat sinkron pertama)")}" style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:13px">
+          ${gid ? `<button class="btn ghost small" data-copy="${esc(gid)}">Salin</button>` : ""}</div>
+        ${gid ? `<div class="muted" style="margin-top:4px">Akun: <b>${esc(Sync.owner() || "?")}</b>${Sync.lastSync() ? ` · sinkron terakhir ${esc(fmt(Sync.lastSync()))}` : ""}</div>` : ""}
+        <div class="note info" style="margin-top:8px"><b>Tambah perangkat:</b> buka aplikasi di perangkat baru, tempel <b>token yang sama</b>,
+          biarkan Gist ID kosong. Aplikasi otomatis memakai gist terbaru di akunmu (yang ini).</div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" data-act="syncnow">${failed ? "Coba lagi" : "Sinkron sekarang"}</button>
+          ${gid ? `<a class="btn ghost" href="https://gist.github.com/${esc(gid)}" target="_blank" rel="noopener">Buka gist & riwayat</a>` : ""}
+          <button class="btn ghost" data-act="findgists">${list ? "Muat ulang daftar gist" : "Lihat semua gist"}</button>
+          <button class="btn danger" data-act="syncoff">Putuskan di perangkat ini</button></div>`;
+      if (list){
+        h += `<h3>Gist data aplikasi di akunmu (${list.length})</h3>` + (list.length ? list.map((g,i) => `
+          <div class="item" style="align-items:center"><span style="flex:1;min-width:0">
+            <code style="word-break:break-all">${esc(g.id)}</code>
+            <div class="muted">diubah ${esc(fmt(g.updated))}${i===0 ? " · <b>terbaru</b>" : ""}${g.feed ? "" : " · versi lama"}</div></span>
+            ${g.id===gid ? `<span class="tag st-selesai">dipakai</span>` : `<button class="btn ghost small" data-usegist="${esc(g.id)}">Pakai</button>`}</div>`).join("")
+          : `<div class="muted">Belum ada. Gist dibuat saat sinkron pertama.</div>`) +
+          (list.length > 1 ? `<div class="muted" style="margin-top:6px">Gist lain biasanya sisa percobaan awal dan boleh dihapus dari halaman gist.
+            Kalau memilih gist lain, data di perangkat ini digabung ke gist itu (yang paling baru diubah yang dipakai).</div>` : "");
+      }
+      h += `</div>`;
+    } else h += `<div class="card"><h2>Sinkron server (GitHub Gist)</h2>
       <div class="muted">Supaya data tidak hilang dan sama di HP & laptop. Aplikasi tetap jalan offline.</div>
       <ol class="steps muted">
         <li>Buka <a href="https://github.com/settings/tokens/new?scopes=gist,public_repo&description=Checklist%20Skripsi%20Edrones" target="_blank" rel="noopener">pembuatan token GitHub</a>
           (sudah terpilih izin <b>gist</b> dan <b>public_repo</b>; public_repo dipakai untuk membuat issue di repo flight controller). Atur kedaluwarsa sampai setelah sidang, lalu Generate.</li>
-        <li>Tempel token di bawah. Perangkat pertama: kosongkan Gist ID (gist dibuat otomatis).</li>
-        <li>Perangkat kedua: tempel token yang sama dan Gist ID dari perangkat pertama.</li>
+        <li>Tempel token di bawah dan biarkan Gist ID kosong. Kalau akunmu sudah punya data aplikasi ini (dari perangkat lain),
+          aplikasi otomatis memakainya; kalau belum, gist baru dibuat.</li>
       </ol>
       <div class="grid"><div class="full"><label>Token GitHub</label><input type="password" id="syncToken" autocomplete="off" placeholder="ghp_…"></div>
-        <div class="full"><label>Gist ID (kosongkan di perangkat pertama)</label><input type="text" id="syncGist" autocomplete="off"></div></div>
+        <div class="full"><label>Gist ID (opsional, biarkan kosong)</label><input type="text" id="syncGist" autocomplete="off"></div></div>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="syncon">Hubungkan</button></div>
       <div class="muted" style="margin-top:6px">Token hanya disimpan di perangkat ini, tidak ikut file ekspor.</div></div>`;
     h += `<div class="card"><h2>Cadangan data</h2>
@@ -869,7 +886,7 @@ function render(){
 
 /* ================= EVENTS ================= */
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-tab],[data-add],[data-delcustom],[data-act],[data-delday],[data-goflight],[data-copy],[data-gotab],[data-gobim],[data-addpoin],[data-delpoin],[data-parsepoin],[data-delbim],[data-issue],[data-issueurl],[data-calnav],[data-calday],[data-delag],[data-deljad]");
+  const b = e.target.closest("[data-tab],[data-add],[data-delcustom],[data-act],[data-delday],[data-goflight],[data-copy],[data-gotab],[data-gobim],[data-addpoin],[data-delpoin],[data-parsepoin],[data-delbim],[data-issue],[data-issueurl],[data-calnav],[data-calday],[data-delag],[data-deljad],[data-usegist]");
   if (!b) return;
   const d = b.dataset;
   if (d.tab){ S.tab = d.tab; save(); render(); window.scrollTo(0,0); }
@@ -912,6 +929,9 @@ document.addEventListener("click", e => {
     if (n===0){ S.calMonth = today().slice(0,7); S.calSel = today(); } else { m += n; if (m<1){ m=12; y--; } if (m>12){ m=1; y++; } S.calMonth = `${y}-${String(m).padStart(2,"0")}`; }
     save(); render(); }
   else if (d.calday){ S.calSel = d.calday; save(); render(); }
+  else if (d.usegist){
+    if (!confirm("Pakai gist ini di perangkat ini? Data perangkat ini akan digabung ke gist tersebut.")) return;
+    Sync.useGist(d.usegist).then(render); }
   else if (d.deljad){ const j = jadOf(d.deljad); if (!confirm(`Hapus jadwal "${j.title}"?`)) return;
     j.deleted = true; touch("j", j.id); save(); render(); }
   else if (d.delag){ if (!confirm("Hapus agenda ini?")) return;
@@ -1096,6 +1116,10 @@ const ACTIONS = {
     await Sync.connect(token, gist); render();
   },
   async syncnow(){ await Sync.now(); render(); },
+  async findgists(){
+    try { await Sync.findGists(); } catch(e){ alert("Gagal memuat daftar gist: " + e.message); }
+    render();
+  },
   syncoff(){
     if (!confirm("Putuskan sinkron di perangkat ini? Data di perangkat dan di gist tetap ada.")) return;
     Sync.disconnect(); render();
@@ -1127,12 +1151,30 @@ const Sync = (() => {
     updateHeader();
   }
   async function api(path, opt = {}){
-    const r = await fetch("https://api.github.com" + path, {...opt, headers:{
-      "Accept":"application/vnd.github+json", "Authorization":"Bearer " + cfg.token,
-      "X-GitHub-Api-Version":"2022-11-28", ...(opt.body ? {"Content-Type":"application/json"} : {})}});
-    if (!r.ok) throw new Error(r.status===401 ? "token salah atau kedaluwarsa" :
-      r.status===404 ? "gist tidak ditemukan (cek Gist ID dan izin token)" : "HTTP " + r.status);
+    let r;
+    try {
+      r = await fetch("https://api.github.com" + path, {...opt, cache:"no-store", headers:{
+        "Accept":"application/vnd.github+json", "Authorization":"Bearer " + cfg.token,
+        "X-GitHub-Api-Version":"2022-11-28", ...(opt.body ? {"Content-Type":"application/json"} : {})}});
+    } catch(e){ throw new Error("tidak bisa menghubungi GitHub (sinyal lemah?). Data aman di perangkat, dicoba lagi otomatis."); }
+    if (!r.ok){
+      const e = new Error(
+        r.status===401 ? "token salah atau kedaluwarsa. Buat token baru lalu hubungkan ulang." :
+        r.status===403 ? (r.headers.get("x-ratelimit-remaining")==="0" ? "batas akses GitHub habis, coba lagi beberapa menit lagi." : "token tidak punya izin gist.") :
+        r.status===404 ? "gist tidak ditemukan atau token tidak bisa membukanya. Pilih gist dari daftar di bawah." :
+        r.status>=500 ? "server GitHub sedang bermasalah, dicoba lagi otomatis." : "HTTP " + r.status);
+      e.status = r.status; throw e;
+    }
     return r.json();
+  }
+  // Semua gist berisi data aplikasi ini di akun pemilik token, terbaru dulu.
+  let candidates = null;
+  async function findGists(){
+    const list = await api("/gists?per_page=100");
+    candidates = list.filter(g => g.files[GIST_FILE])
+      .map(g => ({id:g.id, updated:g.updated_at, created:g.created_at, owner:g.owner?.login, feed:!!g.files[ICS_FILE]}))
+      .sort((a,b) => b.updated.localeCompare(a.updated));
+    return candidates;
   }
   async function readRemote(){
     const g = await api("/gists/" + cfg.gistId);
@@ -1155,6 +1197,11 @@ const Sync = (() => {
     busy = true; setStatus("Menyinkron…");
     try {
       if (!cfg.gistId){
+        // Pakai gist yang sudah ada di akun ini (terbaru) supaya perangkat baru tidak membuat gist kedua.
+        const found = await findGists();
+        if (found.length){ cfg.gistId = found[0].id; cfg.owner = found[0].owner; saveCfg(); }
+      }
+      if (!cfg.gistId){
         const g = await api("/gists", {method:"POST", body: JSON.stringify(
           {description:"Data Checklist Skripsi Edrones (jangan dihapus)", public:false, files: files()})});
         cfg.gistId = g.id; cfg.owner = g.owner?.login; saveCfg();
@@ -1166,11 +1213,15 @@ const Sync = (() => {
         if (remoteIcs !== buildIcs()) needPush = true;   // feed kalender belum ada / belum sama
         if (needPush) await api("/gists/" + cfg.gistId, {method:"PATCH", body: JSON.stringify({files: files()})});
       }
-      cfg.last = Date.now(); saveCfg();
+      cfg.last = Date.now(); cfg.lastError = ""; saveCfg();
       refreshIssues();
       setStatus("Tersinkron " + new Date(cfg.last).toLocaleString("id-ID", {dateStyle:"medium", timeStyle:"short"}));
     } catch(e){
+      cfg.lastError = e.message; saveCfg();
       setStatus("Gagal sinkron: " + e.message);
+      if (e.status === 404 && !candidates) findGists().then(() => safeRender()).catch(() => {});
+      // gangguan jaringan / server: coba lagi otomatis 1 menit lagi
+      if (!e.status || e.status >= 500 || e.status === 403){ clearTimeout(timer); timer = setTimeout(run, 60000); }
     } finally {
       busy = false;
       if (again){ again = false; run(); }
@@ -1182,8 +1233,12 @@ const Sync = (() => {
     schedule(){ if (!cfg.token) return; clearTimeout(timer); timer = setTimeout(run, 2500);
       if (!busy) setStatus("Ada perubahan, menunggu sinkron…"); },
     now: run,
-    connect(token, gistId){ cfg = {token, gistId}; saveCfg(); return run(); },
-    disconnect(){ clearTimeout(timer); cfg = {}; saveCfg(); setStatus("Belum diatur"); },
+    connect(token, gistId){ cfg = {token, gistId}; candidates = null; saveCfg(); return run(); },
+    disconnect(){ clearTimeout(timer); cfg = {}; candidates = null; saveCfg(); setStatus("Belum diatur"); },
+    lastSync: () => cfg.last || 0, owner: () => cfg.owner || "",
+    candidates: () => candidates,
+    findGists,
+    useGist(id){ const c = (candidates||[]).find(x=>x.id===id); cfg.gistId = id; cfg.owner = c?.owner || cfg.owner; saveCfg(); return run(); },
   };
 })();
 window.addEventListener("online", () => Sync.now());
