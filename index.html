@@ -114,6 +114,29 @@ ol.steps li{margin:3px 0}
 .ev-bimbingan{background:var(--warn)} .ev-sidang{background:#8a4fbf} .ev-lain{background:var(--muted)}
 .legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);margin-top:8px}
 .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+/* Latihan (flashcard) */
+.fc-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.fc-chips button{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:999px;padding:5px 11px;font:inherit;font-size:13px}
+.fc-chips button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.fc-stat{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.fc-bar{flex:1;display:flex}
+.fc-bar>i{border-radius:0}
+.fc-bar>i.b{background:var(--bad)}
+.fc-card{min-height:260px;display:flex;flex-direction:column;gap:10px;cursor:pointer;padding:16px}
+.fc-meta{display:flex;justify-content:space-between;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.fc-meta .ans{color:var(--warn);font-weight:600}
+.fc-q{font-size:20px;font-weight:650;line-height:1.3;margin:0}
+.fc-a{font-size:16px;margin:0;white-space:pre-line}
+.fc-a b{color:var(--acc)}
+.fc-hint{margin-top:auto}
+.fc-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.fc-btns .btn{min-height:46px;font-size:15px}
+.fc-full{grid-column:1/-1}
+.btn.fc-ok{background:var(--ok);border-color:var(--ok)}
+.fc-done{cursor:default;text-align:center;justify-content:center}
+.fc-done .fc-btns{margin:0}
+.fc-tools{margin-bottom:6px}
+.fc-keys{font-size:12px}
 </style>
 </head>
 <body>
@@ -128,7 +151,7 @@ ol.steps li{margin:3px 0}
 "use strict";
 /* ================= DATA ================= */
 // Naikkan bersama VERSION di sw.js setiap ada perubahan.
-const APP_VERSION = "v13";
+const APP_VERSION = "v14";
 const KEY = "edrones-checklist-v1";
 const FC_REPO = "SKRIPSI-FIXEDWING/flightcontroller-Edrones";
 const REPO_URL = "https://github.com/" + FC_REPO;
@@ -160,6 +183,89 @@ const PLAN = [
 const EV_EMOJI = {terbang:"✈️", tulis:"📝", tenggat:"⚠️", bimbingan:"👩‍🏫", sidang:"🎓", lain:"📌"};
 const ICS_FILE = "jadwal-skripsi.ics";
 
+// Kartu latihan sidang: [topik, pertanyaan, jawaban]. Tambah kartu baru di AKHIR (id = urutan).
+const FC_CARDS = [
+// Inti
+["Inti","Jelaskan skripsimu dalam satu kalimat.","Logika fuzzy Mamdani menyetel <b>period L1</b> secara online (12–16 s di sekitar 14 s) dari cross-track error dan lajunya, supaya pesawat sayap tetap yang loiter lebih cepat kembali ke orbit setelah diganggu."],
+["Inti","Apa masalah yang mau diselesaikan?","L1 dengan period <b>tetap</b> punya agresivitas koreksi yang sama, mau melenceng sedikit atau banyak. Setelah gangguan, pemulihannya bisa lambat."],
+["Inti","Apa itu loitering dan gunanya?","Terbang melingkar mengelilingi satu titik dengan radius tertentu: untuk pemantauan kontinu, menunggu, atau relay komunikasi. Pesawat sayap tetap tidak bisa hover, jadi harus berputar."],
+["Inti","Apa itu cross-track error di loiter? Arti tandanya?","e = jarak ke pusat − R.\nPositif = di luar orbit (<b>overshoot</b>).\nNegatif = di dalam orbit (<b>undershoot</b>)."],
+["Inti","Tujuanmu tercapai atau tidak? (ya/tidak)","<b>Tercapai sebagian.</b> R100: semua overshoot fuzzy pulih < 5 s (14/14 vs 4/7). R80: hanya 7/17, dan semua yang > 5 s disertai roll jenuh."],
+["Inti","Sebutkan tiga kontribusi skripsimu.","1) Fuzzy self-tuning L1 jalan di flight controller nyata dan terverifikasi.\n2) Temuan mekanisme: penyesuaian period efektif hanya saat roll belum jenuh.\n3) Evaluasi per kejadian yang transparan, tidak disembunyikan di balik RMS."],
+// Teori dasar
+["Teori dasar","Bagaimana pesawat sayap tetap berbelok?","Dengan bank (miring). Komponen horizontal gaya angkat L·sin φ jadi gaya sentripetal. Saat belok tunak: tan φ = V²/(gR)."],
+["Teori dasar","Rumus radius belok minimum? Kenapa pakai groundspeed?","<b>R_min = V²/(g·tan φ_max)</b>. Pakai groundspeed karena yang dikendalikan lintasan relatif tanah."],
+["Teori dasar","Hitung R_min untuk Vg 28 m/s dan bank 45°.","28² / (9,81 × 1) ≈ <b>80 m</b>. Jadi di R80, sisi searah angin sudah pas di batas fisik, tidak ada sisa bank untuk koreksi."],
+["Teori dasar","Airspeed vs groundspeed?","Groundspeed = airspeed + vektor angin. Sisi orbit searah angin punya groundspeed besar sehingga butuh bank lebih besar."],
+["Teori dasar","Apa itu kendali bertingkat (cascade)?","Outer loop (guidance L1) menghasilkan perintah roll; inner loop (pengendali sikap) membuat pesawat mencapai roll itu dengan aileron. Inner loop harus jauh lebih cepat."],
+["Teori dasar","Apa itu saturasi perintah roll dan kenapa penting?","Perintah roll dibatasi bank maksimum 45°. Saat jenuh, menaikkan gain tidak menambah aksi kendali. Ini temuan kunci di R80."],
+["Teori dasar","Arti ζ = 0,707?","Rasio redaman kompromi klasik: overshoot ±4,3% dengan respons cepat."],
+["Teori dasar","Apa itu TECS?","Total Energy Control System: throttle mengatur energi total (kinetik + potensial), pitch mengatur distribusinya. Ketinggian dan kecepatan dikendalikan bersama."],
+// L1
+["Kendali L1","Prinsip L1 guidance (Park et al.)?","Pilih titik acuan di lintasan sejauh L1 di depan pesawat. η = sudut antara vektor kecepatan dan garis ke titik acuan.\n<b>a_cmd = 2V²/L1 · sin η</b>"],
+["Kendali L1","Rumus jarak L1 dari period dan damping?","<b>L1 = (1/π)·ζ·T·Vg</b>. Contoh T=14, ζ=0,707, Vg=20 → L1 ≈ 63 m."],
+["Kendali L1","Period kecil artinya apa?","L1 pendek → koreksi lebih <b>agresif</b>. Period besar → koreksi lebih halus."],
+["Kendali L1","Hukum L1 di mode loiter?","PD terhadap galat radius: <b>kx = ω², kv = 2ζω, ω = 2π/T</b>, ditambah suku sentripetal V²/R. Lalu φ = atan(a/g), dibatasi 45°."],
+["Kendali L1","Period 14 → 12 s, gain naik berapa kali?","Penguatan posisi (14/12)² ≈ <b>1,36×</b>, penguatan laju 14/12 ≈ <b>1,17×</b>. Untuk galat 10–20 m: tambahan roll hanya sekitar 3–6°."],
+["Kendali L1","Turunkan a = 2V²·sin η / L1.","Pesawat mengikuti busur lingkaran lewat posisinya dan titik acuan; tali busur = L1 = 2R·sin η → R = L1/(2 sin η). Percepatan sentripetal a = V²/R = 2V² sin η / L1."],
+["Kendali L1","Turunkan kx = ω², kv = 2ζω.","Galat radial: ë = −a. Dengan a = kx·e + kv·ė → ë + kv·ė + kx·e = 0. Bandingkan dengan s² + 2ζωs + ω² → kv = 2ζω, kx = ω²."],
+["Kendali L1","Kenapa harus L1 ≤ R?","Kalau L1 > R, lingkaran L1 di sekitar pesawat tidak memotong orbit dengan baik; titik acuan tidak terdefinisi sehingga orbit sulit ditangkap."],
+// Fuzzy
+["Fuzzy","Fuzzy di skripsimu termasuk pengendali langsung atau bukan?","Bukan. Fuzzy tidak mengeluarkan perintah aileron, tapi <b>menyetel period L1</b>. Karena itu disebut self-tuning."],
+["Fuzzy","Masukan dan keluaran fuzzy?","Masukan: |e| (Kecil/Sedang/Besar) dan Δe <b>bertanda</b> (Negatif/Nol/Positif).\nKeluaran: ΔT (Turun/Tetap/Naik, puncak −2/0/+2 s).\nPeriod = 14 + ΔT, dibatasi 12–16 s."],
+["Fuzzy","Kenapa |e| mutlak tapi Δe bertanda?","Besar penyimpangan menentukan perlu koreksi atau tidak; tanda Δe menunjukkan pesawat sedang menjauh (+) atau mendekat (−)."],
+["Fuzzy","Kenapa Δe dari kecepatan GNSS, bukan selisih galat?","Loop kendali 200 Hz, posisi GPS 5 Hz. Selisih galat antarsiklus kebanyakan nol lalu melonjak. Kecepatan GNSS (sgn(e)·v⊥) lebih halus."],
+["Fuzzy","Ada berapa aturan? Kapan period Turun?","9 aturan (3×3). <b>Turun</b>: semua saat |e| Besar, dan saat |e| Sedang & Δe Positif."],
+["Fuzzy","Satu-satunya aturan Naik? Logikanya?","<b>|e| Kecil & Δe Negatif → Naik.</b> Pesawat sudah dekat dan masih mendekat, jadi period dinaikkan agar tidak kebablasan ke sisi seberang."],
+["Fuzzy","Bacakan rule base Tabel 3.6.","Negatif: Kecil→Naik, Sedang→Tetap, Besar→Turun\nNol: Kecil→Tetap, Sedang→Tetap, Besar→Turun\nPositif: Kecil→Tetap, Sedang→Turun, Besar→Turun"],
+["Fuzzy","Metode inferensi dan defuzzifikasinya?","Mamdani: AND = min, agregasi = max, defuzzifikasi <b>centroid</b> (keluaran halus/kontinu). Pustaka eFLL."],
+["Fuzzy","Mamdani vs Sugeno? Kenapa tetap Mamdani?","Sugeno: konsekuen konstanta/linier, rata-rata berbobot, ringan. Mamdani dipilih sesuai proposal, aturannya linguistik, komputasi tidak masalah di Cortex-M7. Selisih keluaran hanya di daerah transisi."],
+["Fuzzy","Dari mana fungsi keanggotaan (MF) diturunkan?","Data 5 penerbangan pendahuluan 26 Okt (period 12–16 s).\n|e|: Kecil penuh ≤ 3 m, Sedang puncak 10 m (= toleransi), Besar penuh ≥ 30 m.\nΔe: Nol penuh ≤ P75 (1,25 m/s), Neg/Pos penuh ≥ P90 (2,25 m/s)."],
+["Fuzzy","Kenapa rentang 12–16 s dan dasar 14 s?","Uji pendahuluan: period tetap 12–14 s tanpa kejadian, 15–16 s ada kejadian. 14 s sesuai acuan Dharmawan 2025. ±2 s menjaga period di rentang yang sudah diuji terbang."],
+["Fuzzy","Kenapa yang di-tuning period, bukan damping atau L1?","Period punya makna fisis, dan L1 serta gain PD loiter semuanya diturunkan dari T. Satu parameter menggeser seluruh agresivitas. ζ 0,707 dipertahankan."],
+["Fuzzy","Kenapa centroid sulit mencapai ΔT = −2 penuh?","Centroid = rata-rata berbobot area. −2 hanya tercapai kalau Turun dominan sendirian; begitu Tetap ikut aktif, hasil tertarik ke 0. Data tetap menunjukkan period mencapai 12 s saat galat besar."],
+// Implementasi
+["Implementasi","Hardware yang dipakai?","Teensy 4.1 (Cortex-M7 600 MHz, FreeRTOS), IMU BNO055, GPS Here4 (tanpa RTK), baro MS5611, airspeed MS5525, radio ELRS, GCS Mission Planner lewat MAVLink."],
+["Implementasi","Inner loop AUTO/LOITER pakai LQR?","<b>Tidak.</b> P/PD. LQR hanya di mode GUIDED dan tidak dipakai di uji. Alasan: yang diuji outer loop, inner loop identik di kedua metode, LQR butuh model state-space yang tidak diidentifikasi."],
+["Implementasi","Bagaimana gangguan diberikan?","Switch SH di remote → CH7. Pulsa aileron <b>−300 µs selama 2 s</b>, ditambahkan setelah pengendali sikap. Aktif hanya di AUTO/LOITER, armed, DIST_ENABLE = 1."],
+["Implementasi","Kenapa gangguan ke kiri pada loiter CW?","Roll kiri pada orbit searah jarum jam mendorong pesawat <b>keluar</b> orbit, jadi menghasilkan overshoot yang konsisten."],
+["Implementasi","Arti satuan µs pada gangguan?","Offset lebar pulsa PWM servo (netral 1500 µs), <b>bukan</b> sudut."],
+["Implementasi","Syarat keamanan pemberi gangguan?","CH7 rendah ≥ 300 ms lalu tinggi; hanya armed, RC valid, mode AUTO/LOITER, DIST_ENABLE = 1; amplitudo dibatasi ±400 µs dan 3000 ms."],
+["Implementasi","Bagaimana fuzzy di firmware diverifikasi?","Tes host tiap sel aturan, uji ketahanan 2.160.000 iterasi (≈ 3 jam di 200 Hz), uji unit pemberi gangguan, dan di log period selalu 12–16 s."],
+["Implementasi","Kenapa radius loiter tidak dikoreksi eas2tas/airspeed?","Dulu radius efektif melebar 110–134 m karena baro di fuselage panas. Dengan radius tetap, 100 m benar-benar 100 m."],
+// Metode
+["Metode uji","Kondisi pengujian utama?","Loiter CW, R100 dan R80 (R80 hanya saat angin ≤ 4 m/s), bank 45°, gangguan −300 µs × 2 s, toleransi ±10 m, batas pulih 5 s."],
+["Metode uji","Kenapa hanya fase stabil?","Putaran pertama = fase masuk orbit (capture), galatnya besar bukan karena gangguan. Evaluasi mulai putaran ke-2."],
+["Metode uji","Parameter evaluasi?","Per kejadian keluar toleransi: puncak overshoot/undershoot, waktu pemulihan, sisi orbit, dan apakah perintah roll jenuh."],
+["Metode uji","Kenapa median, bukan rata-rata?","Distribusi galat miring dan berekor panjang; median tahan terhadap outlier."],
+["Metode uji","Kenapa Mann-Whitney, bukan uji-t?","Nonparametrik, tidak butuh asumsi normal, cocok untuk sampel kecil dua kelompok independen."],
+["Metode uji","Arti p = 0,025?","Peluang mendapat beda sebesar itu <b>jika tidak ada beda sebenarnya</b> (H0 benar). p < 0,05 → H0 ditolak. Bukan peluang hipotesismu benar."],
+["Metode uji","Kenapa toleransi ±10 m di loiter tapi ±45 m di lintasan lurus?","Lintasan lurus ada belokan tajam antar-waypoint, galat sesaat setelah belok wajar besar. Loiter kondisi tunak."],
+// Hasil
+["Hasil","Apakah fuzzy bekerja sesuai rancangan?","Ya. Period turun sampai <b>12 s</b> saat galat membesar, dan selalu di rentang 12–16 s."],
+["Hasil","Hasil R100: puncak dan pemulihan overshoot?","Fuzzy: puncak ≤ <b>20,3 m</b>, pulih median <b>1,8 s</b>.\nL1 tetap: puncak ≤ <b>30,5 m</b>, pulih median <b>4,0 s</b>.\nOvershoot saja: Mann-Whitney p = 0,025."],
+["Hasil","Kalau semua kejadian R100 dihitung (termasuk undershoot)?","Median pemulihan 2,0 vs 2,8 s, <b>tidak signifikan</b>. Bedakan dari analisis overshoot saja."],
+["Hasil","Catatan besar di R100?","L1 tetap terbang lebih cepat: airspeed median <b>20,4 vs 14,8 m/s</b>. Beda hasil belum bisa dipisahkan dari kecepatan."],
+["Hasil","Hasil R80?","Fuzzy lebih jarang keluar toleransi: <b>18/34 vs 28/28</b> pulsa. Tapi kejadiannya lebih besar (hingga 30,7 m) dan pulih lebih lama: median <b>5,2 vs 2,4 s</b>. Fuzzy terbang lebih cepat (16,6 vs 14,8 m/s)."],
+["Hasil","Mekanisme utama yang kamu temukan?","Kelompok yang lebih cepat selalu punya kejadian lebih besar. Vg tinggi → butuh bank besar → roll jenuh di 45° → menurunkan period tidak menambah koreksi."],
+["Hasil","Bukti bahwa saturasi yang jadi penyebab?","Dari 66 overshoot, 31 tanpa roll jenuh, semuanya pulih ≤ 3,8 s. Ke-13 overshoot > 5 s semuanya disertai roll jenuh. Korelasi Spearman puncak vs roll: <b>ρ 0,69 (R100) dan 0,73 (R80)</b>."],
+["Hasil","Kenapa period kembali ke ±14 s saat galat puncak 10–20 m di R100?","Galat belum masuk himpunan Besar (penuh 30 m) dan saat puncak Δe ≈ 0. Aturan Sedang & Nol → Tetap. Diakui di saran no. 3."],
+["Hasil","Tiga kalimat inti kesimpulanmu?","1) Fuzzy bekerja sesuai rancangan, period turun saat galat membesar.\n2) Manfaat terlihat saat roll belum jenuh (R100), hilang saat roll mentok (R80).\n3) Karena kecepatan terbang beda, hasilnya <b>kecenderungan</b>, bukan bukti keunggulan."],
+// Jebakan
+["Jebakan","Kalau period 12 tetap sudah nol kejadian, untuk apa fuzzy?","Period kecil terus = agresif terus, lebih sering dekat saturasi dan osilasi, apalagi radius kecil. Fuzzy agresif hanya saat perlu. Jujur: uji pendahuluan tanpa gangguan dan bank 35°, jadi pembanding period 12 tetap adalah saran lanjutan."],
+["Jebakan","Apakah 21 dan 34 pulsa itu sampel independen?","Tidak sepenuhnya (<b>pseudoreplication</b>): pulsa satu penerbangan berbagi angin, baterai, airspeed. p-value cenderung terlalu optimis. Lebih ketat: analisis per penerbangan / mixed model."],
+["Jebakan","Simpulan bilang belum signifikan, intisari pakai p = 0,025. Cherry picking?","Dua analisis berbeda. Overshoot saja punya alasan fisis (pulsa kiri pada CW mendorong keluar), bukan dipilih setelah lihat hasil. Akui risiko uji berganda dan selalu sebut beda airspeed."],
+["Jebakan","Yang kamu ukur efek fuzzy atau efek kecepatan?","Akui <b>belum bisa dipisahkan</b>. Polanya konsisten dengan fisika. Fuzzy tidak bisa menambah bank yang tidak tersedia. Bukti fuzzy bekerja sesuai rancangan tetap valid."],
+["Jebakan","Syarat L1 ≤ R terpenuhi di R80?","T=16, Vg=27 → L1 ≈ 97 m > 80 m (T=14 → ≈ 85 m). Dilanggar di sisi Vg tinggi. Di loiter firmware pakai hukum PD lingkaran, L1 terutama saat capture. Akui sebagai batas teoretis R80."],
+["Jebakan","Kestabilan masih dijamin kalau period berubah?","Bukti Lyapunov Park untuk parameter tetap. Argumen praktis: tiap T di 12–16 s stabil saat diuji tetap, perubahan halus dan lambat. Bukti formal tidak dilakukan (keterbatasan)."],
+["Jebakan","Ini benar self-tuning atau gain scheduling?","Lebih dekat ke <b>fuzzy gain scheduling</b> / supervisory tuning; tidak ada identifikasi model online. Istilah mengikuti literatur dan proposal. Jangan defensif."],
+["Jebakan","Proposal: L1 → fuzzy → LQR. Kenapa berubah?","LQR butuh model state-space yang valid. Inner loop P/PD sudah teruji stabil. Kontribusi di outer loop, dan inner loop sama untuk kedua metode lebih penting dari jenisnya."],
+["Jebakan","MF dari data yang mencampur fase masuk orbit, padahal evaluasi fase stabil?","Fase stabil hampir tanpa galat > 10 m, tidak cukup untuk mendefinisikan Besar. Konsekuensinya Besar = 30 m terlalu jauh untuk galat gangguan nyata (10–30 m). Akui sebagai keterbatasan."],
+["Jebakan","Apa yang terjadi saat GPS glitch 20 m?","|e| melonjak, period turun ke 12, belok agresif sesaat. Dibatasi semesta masukan, clamp 12–16 s, dan bank maksimum. Tidak ada deteksi glitch khusus (bisa jadi saran)."],
+["Jebakan","Kalau diulang dari nol, apa yang kamu ubah?","Uji berpasangan di hari sama dengan airspeed dijaga, pembanding period 12 tetap, pulsa diacak per sisi orbit dan dua arah, MF Besar dari data gangguan, aturan Sedang & Nol → Turun, analisis per penerbangan."],
+["Jebakan","Angin diukur bagaimana?","Tidak diukur langsung. Diperkirakan setelah terbang dari variasi groundspeed GNSS per sisi orbit. Angin bukan variabel penelitian."]
+];
+
 const TABS = [
   {id:"ringkasan", t:"Ringkasan"},
   {id:"kalender", t:"Kalender"},
@@ -170,6 +276,7 @@ const TABS = [
   {id:"skripsi", t:"Skripsi"},
   {id:"bimbingan", t:"Bimbingan"},
   {id:"sidang", t:"Sidang"},
+  {id:"latihan", t:"Latihan"},
 ];
 
 const PARAMS = [
@@ -380,7 +487,7 @@ const LOG_FIELDS = [
 const STATUS = {belum:"Belum", selesai:"Selesai", ulang:"Perlu diulang", batal:"Batal"};
 
 /* ================= STATE ================= */
-function fresh(){ return {checks:{}, flights:{}, days:[], custom:{}, bimbingan:[], agenda:[], jadwal:PLAN.map(x=>({...x, done:false})), sidang:"", tab:"ringkasan", open:{}, projectDir:DEFAULT_DIR, ts:{}}; }
+function fresh(){ return {checks:{}, flights:{}, days:[], custom:{}, bimbingan:[], agenda:[], jadwal:PLAN.map(x=>({...x, done:false})), fc:{}, sidang:"", tab:"ringkasan", open:{}, projectDir:DEFAULT_DIR, ts:{}}; }
 let S;
 try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = fresh(); }
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); updateHeader(); Sync.schedule(); }
@@ -398,6 +505,7 @@ function getV(st, k){
     case "b":  return (st.bimbingan||[]).find(x=>x.id===a);
     case "ag": return (st.agenda||[]).find(x=>x.id===a);
     case "j":  return (st.jadwal||[]).find(x=>x.id===a);
+    case "fk": return (st.fc||{})[a];
     default:   return st[t];   // sidang, projectDir
   }
 }
@@ -419,6 +527,7 @@ function setV(st, k, v){
       if (i<0) arr.push(c); else arr[i] = c; break; }
     case "ag": { const arr = (st.agenda ||= []); const i = arr.findIndex(x=>x.id===a); const c = v && {...v};
       if (i<0) arr.push(c); else arr[i] = c; break; }
+    case "fk": (st.fc ||= {})[a] = v; break;
     default:   st[t] = v;
   }
 }
@@ -434,6 +543,7 @@ function allKeys(st){
   (st.bimbingan||[]).forEach(b=>ks.push(K("b",b.id)));
   (st.agenda||[]).forEach(a=>ks.push(K("ag",a.id)));
   (st.jadwal||[]).forEach(j=>ks.push(K("j",j.id)));
+  Object.keys(st.fc||{}).forEach(i=>ks.push(K("fk",i)));
   if (st.sidang) ks.push("sidang");
   ks.push("projectDir");
   return ks;
@@ -447,7 +557,7 @@ function mergeInto(local, remote){
   });
   return changed;
 }
-const SYNC_FIELDS = ["checks","flights","days","custom","bimbingan","agenda","jadwal","sidang","projectDir","ts"];
+const SYNC_FIELDS = ["checks","flights","days","custom","bimbingan","agenda","jadwal","fc","sidang","projectDir","ts"];
 const syncable = st => Object.fromEntries(SYNC_FIELDS.map(f=>[f, st[f]]));
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -515,7 +625,7 @@ function updateHeader(){
   document.getElementById("sub").textContent = s;
   document.getElementById("tabs").innerHTML = TABS.map(x => {
     const pr = p[x.id];
-    const n = pr ? `<span class="n">${pr[0]}/${pr[1]}</span>` : (x.id==="hari" ? `<span class="n">${liveDays().length}</span>` : "");
+    const n = pr ? `<span class="n">${pr[0]}/${pr[1]}</span>` : (x.id==="hari" ? `<span class="n">${liveDays().length}</span>` : x.id==="latihan" ? `<span class="n">${fcKnown()}/${FC_CARDS.length}</span>` : "");
     return `<button data-tab="${x.id}" class="${S.tab===x.id?"on":""}">${x.t}${n}</button>`;
   }).join("");
 }
@@ -917,6 +1027,79 @@ function render(){
   $main.innerHTML = VIEWS[S.tab]();
   window.scrollTo(0, y);
 }
+
+/* ================= LATIHAN (FLASHCARD SIDANG) ================= */
+// Status kartu (1 = sudah paham, 0 = belum hafal) disinkron lewat S.fc; urutan & posisi putaran hanya di perangkat ini.
+const FC_TOPICS = ["Semua", ...new Set(FC_CARDS.map(c=>c[0]))];
+const FC_KEY = "edrones-flashcard-sesi";
+let FC = {topic:"Semua", order:[], pos:0, flipped:false};
+try { const s = JSON.parse(localStorage.getItem(FC_KEY) || "null"); if (s && Array.isArray(s.order)) FC = {...FC, ...s, flipped:false}; } catch(e){}
+const fcSave = () => { try { localStorage.setItem(FC_KEY, JSON.stringify({topic:FC.topic, order:FC.order, pos:FC.pos})); } catch(e){} };
+const fcIds = t => FC_CARDS.map((_,i)=>i).filter(i => t==="Semua" || FC_CARDS[i][0]===t);
+const fcId = i => "k" + i;
+const fcKnown = () => FC_CARDS.filter((_,i)=>(S.fc||{})[fcId(i)]===1).length;
+function fcStart(t){ FC.topic = t; FC.order = fcIds(t); FC.pos = 0; FC.flipped = false; fcSave(); }
+if (!FC.order.length || FC.order.some(i => !FC_CARDS[i])) fcStart(FC.topic && FC_TOPICS.includes(FC.topic) ? FC.topic : "Semua");
+function fcShuffle(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function fcMark(v){
+  const i = FC.order[FC.pos]; (S.fc ||= {})[fcId(i)] = v; touch("fk", fcId(i));
+  if (v===0) FC.order.push(i);
+  FC.pos++; FC.flipped = false; fcSave(); save(); render();
+}
+function fcAct(a){
+  if (a==="flip"){ if (FC.pos < FC.order.length) FC.flipped = !FC.flipped; }
+  else if (a==="no") fcMark(0);
+  else if (a==="ok") fcMark(1);
+  else if (a==="shuffle"){ FC.order = FC.order.slice(0, FC.pos).concat(fcShuffle(FC.order.slice(FC.pos))); FC.flipped = false; }
+  else if (a==="redo"){ const ids = fcIds(FC.topic).filter(i => (S.fc||{})[fcId(i)]!==1); FC.order = ids.length ? ids : fcIds(FC.topic); FC.pos = 0; FC.flipped = false; }
+  else if (a==="reset"){
+    if (!confirm("Hapus tanda sudah/belum untuk kartu topik ini?")) return;
+    fcIds(FC.topic).forEach(i => { if ((S.fc||{})[fcId(i)] !== undefined){ S.fc[fcId(i)] = null; touch("fk", fcId(i)); } });
+    fcStart(FC.topic); save();
+  }
+  if (a!=="no" && a!=="ok"){ fcSave(); render(); }
+}
+VIEWS.latihan = function(){
+  const ids = fcIds(FC.topic), fc = S.fc || {};
+  const k = ids.filter(i=>fc[fcId(i)]===1).length, b = ids.filter(i=>fc[fcId(i)]===0).length;
+  let h = `<div class="card"><h2>Latihan sidang</h2>
+    <div class="muted">Jawab dulu di kepala atau ucapkan, lalu buka jawabannya. Kartu "belum hafal" muncul lagi di akhir putaran. Tanda sudah/belum ikut sinkron ke perangkat lain.</div>
+    <div class="fc-chips">${FC_TOPICS.map(t=>`<button class="${FC.topic===t?"on":""}" data-fctopic="${esc(t)}">${esc(t)}</button>`).join("")}</div>
+    <div class="fc-stat"><span>${Math.min(FC.pos+1, FC.order.length)}/${FC.order.length}</span>
+      <div class="bar fc-bar"><i style="width:${ids.length?100*k/ids.length:0}%"></i><i class="b" style="width:${ids.length?100*b/ids.length:0}%"></i></div>
+      <span>✓${k} · ✗${b}</span></div></div>`;
+  if (FC.pos >= FC.order.length){
+    h += `<div class="card fc-card fc-done"><h2>Putaran selesai</h2><p>${k} kartu sudah paham, ${b} masih perlu diulang.</p>
+      <div class="fc-btns"><button class="btn" data-fc="redo">Ulang yang belum hafal</button><button class="btn ghost" data-fctopic="${esc(FC.topic)}">Semua kartu lagi</button></div></div>`;
+  } else {
+    const c = FC_CARDS[FC.order[FC.pos]];
+    h += `<div class="card fc-card" data-fc="flip" role="button" tabindex="0">
+      <div class="fc-meta"><span>${esc(c[0])}</span><span class="${FC.flipped?"ans":""}">${FC.flipped?"Jawaban":"Pertanyaan"}</span></div>
+      <p class="fc-q">${c[1]}</p>
+      ${FC.flipped ? `<p class="fc-a">${c[2]}</p>` : `<p class="muted fc-hint">Ketuk kartu untuk membuka jawaban.</p>`}
+    </div>
+    <div class="fc-btns">${FC.flipped
+      ? `<button class="btn danger" data-fc="no">Belum hafal</button><button class="btn fc-ok" data-fc="ok">Sudah paham</button>`
+      : `<button class="btn fc-full" data-fc="flip">Buka jawaban</button>`}</div>`;
+  }
+  h += `<div class="row fc-tools"><button class="btn ghost small" data-fc="shuffle">Acak urutan</button>
+    <button class="btn ghost small" data-fc="redo">Ulang yang belum hafal</button>
+    <button class="btn ghost small" data-fc="reset">Mulai dari awal</button></div>
+    <div class="muted fc-keys">Keyboard: Spasi buka/tutup · 1 belum hafal · 2 sudah paham</div>`;
+  return h;
+};
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-fc],[data-fctopic]"); if (!b) return;
+  if (b.dataset.fctopic !== undefined){ fcStart(b.dataset.fctopic); render(); return; }
+  if (b.dataset.fc==="flip" && e.target.closest("button:not([data-fc])")) return;
+  fcAct(b.dataset.fc);
+});
+document.addEventListener("keydown", e => {
+  if (S.tab!=="latihan" || e.target.closest?.("input,textarea,select")) return;
+  if (e.key===" "){ e.preventDefault(); fcAct("flip"); }
+  else if (FC.flipped && e.key==="1") fcAct("no");
+  else if (FC.flipped && e.key==="2") fcAct("ok");
+});
 
 /* ================= EVENTS ================= */
 document.addEventListener("click", e => {
