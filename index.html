@@ -87,6 +87,15 @@ details.fl>summary{list-style:none;padding:11px 14px;display:flex;align-items:ce
 details.fl>summary::-webkit-details-marker{display:none}
 details.fl .body{padding:0 14px 12px}
 .code{font-weight:700;min-width:40px}
+.rev-form{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rev-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+.rev-form label.wide{grid-column:1/-1}
+.rev-form .btn{grid-column:1/-1;min-height:42px}
+.item.rev label{display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+.rev-loc{font-weight:600}
+.rev-fix,.rev-note{font-size:14px;overflow-wrap:anywhere}
+.rev-note{color:var(--muted)}
+.item.rev.done label s{text-decoration:none}
 .tag{font-size:11px;border-radius:99px;padding:2px 8px;background:var(--acc-soft);color:var(--acc);white-space:nowrap}
 .st-selesai{background:var(--ok-soft);color:var(--ok)}
 .st-ulang{background:var(--warn-soft);color:var(--warn)}
@@ -151,7 +160,7 @@ ol.steps li{margin:3px 0}
 "use strict";
 /* ================= DATA ================= */
 // Naikkan bersama VERSION di sw.js setiap ada perubahan.
-const APP_VERSION = "v14";
+const APP_VERSION = "v15";
 const KEY = "edrones-checklist-v1";
 const FC_REPO = "SKRIPSI-FIXEDWING/flightcontroller-Edrones";
 const REPO_URL = "https://github.com/" + FC_REPO;
@@ -274,6 +283,7 @@ const TABS = [
   {id:"terbang", t:"Terbang"},
   {id:"analisis", t:"Analisis"},
   {id:"skripsi", t:"Skripsi"},
+  {id:"revisi", t:"Revisi"},
   {id:"bimbingan", t:"Bimbingan"},
   {id:"sidang", t:"Sidang"},
   {id:"latihan", t:"Latihan"},
@@ -487,7 +497,7 @@ const LOG_FIELDS = [
 const STATUS = {belum:"Belum", selesai:"Selesai", ulang:"Perlu diulang", batal:"Batal"};
 
 /* ================= STATE ================= */
-function fresh(){ return {checks:{}, flights:{}, days:[], custom:{}, bimbingan:[], agenda:[], jadwal:PLAN.map(x=>({...x, done:false})), fc:{}, sidang:"", tab:"ringkasan", open:{}, projectDir:DEFAULT_DIR, ts:{}}; }
+function fresh(){ return {checks:{}, flights:{}, days:[], custom:{}, bimbingan:[], agenda:[], jadwal:PLAN.map(x=>({...x, done:false})), fc:{}, revisi:[], sidang:"", tab:"ringkasan", open:{}, projectDir:DEFAULT_DIR, ts:{}}; }
 let S;
 try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch(e){ S = fresh(); }
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); updateHeader(); Sync.schedule(); }
@@ -506,6 +516,7 @@ function getV(st, k){
     case "ag": return (st.agenda||[]).find(x=>x.id===a);
     case "j":  return (st.jadwal||[]).find(x=>x.id===a);
     case "fk": return (st.fc||{})[a];
+    case "rv": return (st.revisi||[]).find(x=>x.id===a);
     default:   return st[t];   // sidang, projectDir
   }
 }
@@ -528,6 +539,8 @@ function setV(st, k, v){
     case "ag": { const arr = (st.agenda ||= []); const i = arr.findIndex(x=>x.id===a); const c = v && {...v};
       if (i<0) arr.push(c); else arr[i] = c; break; }
     case "fk": (st.fc ||= {})[a] = v; break;
+    case "rv": { const arr = (st.revisi ||= []); const i = arr.findIndex(x=>x.id===a); const c = v && {...v};
+      if (i<0) arr.push(c); else arr[i] = c; break; }
     default:   st[t] = v;
   }
 }
@@ -544,6 +557,7 @@ function allKeys(st){
   (st.agenda||[]).forEach(a=>ks.push(K("ag",a.id)));
   (st.jadwal||[]).forEach(j=>ks.push(K("j",j.id)));
   Object.keys(st.fc||{}).forEach(i=>ks.push(K("fk",i)));
+  (st.revisi||[]).forEach(r=>ks.push(K("rv",r.id)));
   if (st.sidang) ks.push("sidang");
   ks.push("projectDir");
   return ks;
@@ -557,7 +571,7 @@ function mergeInto(local, remote){
   });
   return changed;
 }
-const SYNC_FIELDS = ["checks","flights","days","custom","bimbingan","agenda","jadwal","fc","sidang","projectDir","ts"];
+const SYNC_FIELDS = ["checks","flights","days","custom","bimbingan","agenda","jadwal","fc","revisi","sidang","projectDir","ts"];
 const syncable = st => Object.fromEntries(SYNC_FIELDS.map(f=>[f, st[f]]));
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -586,6 +600,9 @@ function parseTglID(text, ref){
 function linkedTask(p){ return p.target && (S.custom[p.target.gid]||[]).find(c=>c.id===p.target.cid); }
 function poinCheckId(b, p){ const c = linkedTask(p); return c ? `${p.target.gid}:c:${c.id}` : `bim:${b.id}:${p.id}`; }
 const liveDays = () => S.days.filter(d=>!d.deleted);
+const liveRev = () => (S.revisi||[]).filter(r=>r && !r.deleted);
+const revOf = id => (S.revisi||[]).find(r=>r.id===id);
+const REV_SRC = ["Sendiri", "Pembimbing 1", "Pembimbing 2", "Penguji", "Lainnya"];
 const flOf = code => (S.flights[code] ||= {status:"belum", log:{}});
 
 /* ================= HITUNG PROGRES ================= */
@@ -610,6 +627,7 @@ function progress(){
   p.sidang = progGroups("sidang");
   let bd=0, bt=0; liveBim().forEach(b=>b.poin.forEach(x=>{ bt++; if (S.checks[poinCheckId(b,x)]) bd++; }));
   p.bimbingan = [bd, bt];
+  p.revisi = [liveRev().filter(r=>r.done).length, liveRev().length];
   return p;
 }
 
@@ -1019,6 +1037,34 @@ const VIEWS = {
   },
 
   sidang(){ return GROUPS.sidang.map(g=>groupHtml(g)).join(""); },
+  revisi(){
+    const all = liveRev().slice().sort((a,b)=>(+a.hal||9999)-(+b.hal||9999) || (a.dibuat||0)-(b.dibuat||0));
+    const open = all.filter(r=>!r.done), done = all.filter(r=>r.done);
+    const row = r => `<div class="item rev ${r.done?"done":""}">
+      <input type="checkbox" id="rv-${esc(r.id)}" data-revdone="${esc(r.id)}" ${r.done?"checked":""}>
+      <label for="rv-${esc(r.id)}">
+        <span class="rev-loc">${r.hal ? `Hal. ${esc(r.hal)}` : "Tanpa halaman"}${r.lokasi ? ` · ${esc(r.lokasi)}` : ""}</span>
+        ${r.salah || r.benar ? `<span class="rev-fix">${r.salah ? `<s>${esc(r.salah)}</s>` : ""}${r.salah && r.benar ? " → " : ""}${r.benar ? `<b>${esc(r.benar)}</b>` : ""}</span>` : ""}
+        ${r.catatan ? `<span class="rev-note">${esc(r.catatan)}</span>` : ""}
+        ${r.sumber && r.sumber!=="Sendiri" ? `<span class="tag">${esc(r.sumber)}</span>` : ""}
+      </label>
+      <button class="del" data-delrev="${esc(r.id)}" title="Hapus">×</button></div>`;
+    let h = `<div class="card"><div class="row"><h2>Tambah revisi</h2></div>
+      <div class="rev-form">
+        <label>Halaman<input type="number" inputmode="numeric" data-revin="hal" placeholder="60"></label>
+        <label>Lokasi<input type="text" data-revin="lokasi" placeholder="baris ke-2 dari akhir"></label>
+        <label>Tertulis (salah)<input type="text" data-revin="salah" placeholder="100 m"></label>
+        <label>Seharusnya<input type="text" data-revin="benar" placeholder="10 m"></label>
+        <label class="wide">Catatan<input type="text" data-revin="catatan" placeholder="opsional"></label>
+        <label>Dari<select data-revin="sumber">${REV_SRC.map(x=>`<option>${x}</option>`).join("")}</select></label>
+        <button class="btn" data-act="addrev">Tambah</button>
+      </div></div>`;
+    h += `<div class="card"><div class="row"><h2>Belum diperbaiki</h2><span class="spacer"></span><span class="muted">${open.length}</span></div>` +
+      (open.length ? open.map(row).join("") : `<div class="muted">Tidak ada revisi yang tertunda.</div>`) + `</div>`;
+    if (done.length) h += `<div class="card"><div class="row"><h2>Sudah diperbaiki</h2><span class="spacer"></span><span class="muted">${done.length}</span></div>` +
+      done.map(row).join("") + `</div>`;
+    return h;
+  },
 };
 
 function render(){
@@ -1103,7 +1149,7 @@ document.addEventListener("keydown", e => {
 
 /* ================= EVENTS ================= */
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-tab],[data-add],[data-delcustom],[data-act],[data-delday],[data-goflight],[data-copy],[data-gotab],[data-gobim],[data-addpoin],[data-delpoin],[data-parsepoin],[data-delbim],[data-issue],[data-issueurl],[data-calnav],[data-calday],[data-delag],[data-deljad],[data-usegist],[data-gocal]");
+  const b = e.target.closest("[data-tab],[data-add],[data-delcustom],[data-act],[data-delday],[data-goflight],[data-copy],[data-gotab],[data-gobim],[data-addpoin],[data-delpoin],[data-parsepoin],[data-delbim],[data-issue],[data-issueurl],[data-calnav],[data-calday],[data-delag],[data-deljad],[data-usegist],[data-gocal],[data-delrev]");
   if (!b) return;
   const d = b.dataset;
   if (d.tab){ S.tab = d.tab; save(); render(); window.scrollTo(0,0); }
@@ -1154,6 +1200,8 @@ document.addEventListener("click", e => {
     j.deleted = true; touch("j", j.id); save(); render(); }
   else if (d.delag){ if (!confirm("Hapus agenda ini?")) return;
     const a = (S.agenda||[]).find(x=>x.id===d.delag); if (a){ a.deleted = true; touch("ag", a.id); } save(); render(); }
+  else if (d.delrev){ if (!confirm("Hapus revisi ini?")) return;
+    const r = revOf(d.delrev); if (r){ r.deleted = true; touch("rv", r.id); } save(); render(); }
   else if (d.act) ACTIONS[d.act]();
 });
 document.addEventListener("change", e => {
@@ -1162,6 +1210,7 @@ document.addEventListener("change", e => {
     t.closest(".item")?.classList.toggle("done", t.checked); save(); }
   else if (d.poindue){ const [bid,pid] = d.poindue.split("|"); const x = bimOf(bid).poin.find(y=>y.id===pid);
     x.due = t.value; touch("b", bid); save(); render(); }
+  else if (d.revdone){ const r = revOf(d.revdone); r.done = t.checked; r.selesai = t.checked ? Date.now() : null; touch("rv", r.id); save(); render(); }
   else if (d.jdone){ const j = jadOf(d.jdone); j.done = t.checked; touch("j", j.id); save(); render(); }
   else if (d.totask && t.value){
     const [bid,pid] = d.totask.split("|"), [tab,gid] = t.value.split("|");
@@ -1194,6 +1243,7 @@ document.addEventListener("focusout", e => {
 document.addEventListener("keydown", e => {
   if (e.key!=="Enter") return;
   if (e.target.dataset.addinput) addCustom(e.target.dataset.addinput);
+  else if (e.target.dataset.revin && e.target.tagName === "INPUT") ACTIONS.addrev();
   else if (e.target.dataset.poininput) addPoin(e.target.dataset.poininput);
 });
 function addPoin(bid){
@@ -1257,6 +1307,13 @@ function download(name, text, type){
 }
 const today = () => new Date().toISOString().slice(0,10);
 const ACTIONS = {
+  addrev(){
+    const v = {}; document.querySelectorAll("[data-revin]").forEach(el => v[el.dataset.revin] = el.value.trim());
+    if (!v.hal && !v.salah && !v.benar && !v.catatan && !v.lokasi){ alert("Isi minimal halaman dan apa yang perlu diperbaiki."); return; }
+    const r = {id:uid(), hal:v.hal, lokasi:v.lokasi, salah:v.salah, benar:v.benar, catatan:v.catatan, sumber:v.sumber||"Sendiri", done:false, dibuat:Date.now()};
+    (S.revisi ||= []).push(r); touch("rv", r.id); save(); render();
+    document.querySelector('[data-revin="hal"]')?.focus();
+  },
   export(){ download(`checklist-skripsi-${today()}.json`, JSON.stringify(S,null,2), "application/json"); },
   csv(){
     const cols = ["kode","metode","fuzzy","pid","radius","status",...LOG_FIELDS.map(x=>x[0]),"catatan"];
